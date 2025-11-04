@@ -1,4 +1,7 @@
 {
+  "useCUA": true,
+  "cuaModel": "openai/computer-use-preview",
+  "cuaMaxSteps": 3,
   "sequence": [
     { "wait": 1000 },
     { "action": "click", "target": "click the center square div in the game board" },

@@ -11,8 +11,10 @@ import { loadConfig } from './config.js';
 import { SessionManager } from './session.js';
 import { executeSequence } from './interaction.js';
 import { CaptureManager } from './capture.js';
+import { CUAManager } from './cua.js';
 import { generateResult, writeResult } from './reporter.js';
 import { generateSessionId } from './utils/time.js';
+import { logger } from './utils/logger.js';
 
 const program = new Command();
 
@@ -58,6 +60,28 @@ program
       // Setup capture manager
       const captureManager = new CaptureManager(sessionDir);
 
+      // Initialize CUA manager if enabled
+      let cuaManager: CUAManager | undefined;
+      if (config.useCUA) {
+        spinner.start('Initializing Computer Use Agent...');
+        try {
+          cuaManager = new CUAManager(session.stagehand, {
+            model: config.cuaModel || 'openai/computer-use-preview',
+            maxSteps: config.cuaMaxSteps || 3,
+          });
+          await cuaManager.initialize();
+          spinner.succeed('Computer Use Agent initialized');
+        } catch (error) {
+          spinner.fail('Failed to initialize Computer Use Agent');
+          logger.error('CUA initialization error:', error);
+          // Continue without CUA (graceful degradation)
+          cuaManager = undefined;
+          if (!process.env.OPENAI_API_KEY) {
+            logger.warn('OPENAI_API_KEY not set. CUA requires an OpenAI API key.');
+          }
+        }
+      }
+
       // Capture baseline screenshot
       spinner.start('Capturing baseline screenshot...');
       await captureManager.captureBaseline(session.page);
@@ -65,11 +89,18 @@ program
 
       // Execute action sequence
       spinner.start('Executing test sequence...');
-      const actionResults = await executeSequence(session.stagehand, config, startTime, captureManager, (result) => {
-        if (!result.success) {
-          spinner.warn(`Action ${result.actionIndex + 1} failed: ${result.error}`);
-        }
-      });
+      const actionResults = await executeSequence(
+        session.stagehand,
+        config,
+        startTime,
+        captureManager,
+        (result) => {
+          if (!result.success) {
+            spinner.warn(`Action ${result.actionIndex + 1} failed: ${result.error}`);
+          }
+        },
+        cuaManager,
+      );
 
       const successfulActions = actionResults.filter((r) => r.success).length;
       spinner.succeed(`Executed ${successfulActions}/${actionResults.length} actions successfully`);
@@ -90,13 +121,16 @@ program
       const captureResult = captureManager.getResult(logsPath || undefined);
       const allIssues = [...sessionIssues, ...captureResult.issues];
 
+      // Get CUA usage metrics if available
+      const cuaUsage = cuaManager?.getUsageMetrics();
+
       // Generate and write result
       spinner.start('Generating test report...');
       let testResult;
       let resultPath: string;
       
       try {
-        testResult = generateResult(actionResults, captureResult, startTime, allIssues);
+        testResult = generateResult(actionResults, captureResult, startTime, allIssues, cuaUsage);
 
         // Note: Model override (--model) and LLM evaluation (--llm) are placeholders for Phase 5
 

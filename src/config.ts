@@ -8,10 +8,11 @@ import { logger } from './utils/logger.js';
 
 // Schema for individual sequence steps
 const SequenceStepSchema = z.union([
-  // Click action: { action: "click", target: "start button" }
+  // Click action: { action: "click", target: "start button", useCUA?: boolean }
   z.object({
     action: z.literal('click'),
     target: z.string(),
+    useCUA: z.boolean().optional(), // Per-action CUA override
   }),
   // Press action: { action: "press", key: "ArrowRight", repeat?: 5 }
   z.object({
@@ -61,6 +62,10 @@ export const ConfigSchema = z.object({
       notes: z.string().optional(),
     })
     .optional(),
+  // CUA (Computer Use Agent) configuration
+  useCUA: z.boolean().default(false),
+  cuaModel: z.string().optional(), // e.g., "openai/computer-use-preview"
+  cuaMaxSteps: z.number().int().positive().max(20).default(3), // Max steps per CUA action
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -78,6 +83,9 @@ const defaultConfig: Config = {
     action: 10000,
     total: 60000,
   },
+  useCUA: false,
+  cuaModel: 'openai/computer-use-preview',
+  cuaMaxSteps: 3,
 };
 
 /**
@@ -106,6 +114,10 @@ export function loadConfig(configPath?: string): Config {
       ...defaultConfig,
       ...validatedConfig,
       timeouts: mergedTimeouts,
+      // Ensure CUA defaults are applied if not specified
+      useCUA: validatedConfig.useCUA ?? defaultConfig.useCUA,
+      cuaModel: validatedConfig.cuaModel ?? defaultConfig.cuaModel,
+      cuaMaxSteps: validatedConfig.cuaMaxSteps ?? defaultConfig.cuaMaxSteps,
     };
   } catch (error) {
     if (error instanceof z.ZodError) {

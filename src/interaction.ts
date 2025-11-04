@@ -5,6 +5,7 @@
 import type { Stagehand } from '@browserbasehq/stagehand';
 import type { SequenceStep, Config } from './config.js';
 import type { CaptureManager } from './capture.js';
+import type { CUAManager } from './cua.js';
 import { logger } from './utils/logger.js';
 import { sleep, getTimestamp } from './utils/time.js';
 import { retryWithBackoff, isRetryableError } from './utils/retry.js';
@@ -27,6 +28,7 @@ export async function executeAction(
   actionIndex: number,
   config: Config,
   captureManager?: CaptureManager,
+  cuaManager?: CUAManager,
 ): Promise<ActionResult> {
   const actionStartTime = Date.now();
   const timeout = config.timeouts?.action ?? 10000;
@@ -71,76 +73,105 @@ export async function executeAction(
         if ('action' in step) {
           switch (step.action) {
             case 'click': {
-              // Click action - use observe→act pattern for better reliability
-              // Only cache successful observe() results, not fallback actions
-              const observeTimeout = timeout;
-              let actions: any[] = [];
-              
-              // Try observe with original instruction
-              try {
-                actions = await stagehand.observe(`find the ${step.target}`, {
-                  timeout: observeTimeout,
-                });
-              } catch (error) {
-                logger.debug(`Observe failed for "${step.target}": ${error}`);
-              }
+              // Check if CUA should be used (global flag or per-action override)
+              const useCUA = step.useCUA ?? config.useCUA ?? false;
 
-              // If observe didn't find anything, try alternative phrasings
-              if (!actions || actions.length === 0) {
-                const alternativePhrasings = [
-                  `find ${step.target}`,
-                  `locate ${step.target}`,
-                  `click ${step.target}`,
-                ];
+              if (useCUA && cuaManager) {
+                // Use CUA for visual-based clicking
+                // Make instruction clear and single-action focused
+                // For simple clicks, use maxSteps: 1 to prevent looping
+                const instruction = `Click on ${step.target}. This is a single click action - click once and immediately stop.`;
+                const maxSteps = Math.min(config.cuaMaxSteps ?? 1, 2); // Limit to 1-2 steps for simple clicks
+                const actionTimeout = timeout; // Use action timeout from config
 
-                for (const phrasing of alternativePhrasings) {
-                  try {
-                    logger.debug(`Retrying observe with alternative phrasing: "${phrasing}"`);
-                    actions = await stagehand.observe(phrasing, {
-                      timeout: observeTimeout,
-                    });
-                    if (actions && actions.length > 0) {
-                      logger.debug(`Found ${actions.length} elements with alternative phrasing`);
-                      break;
+                try {
+                  logger.debug(`CUA click action: "${instruction}" (maxSteps: ${maxSteps})`);
+                  await cuaManager.execute(instruction, maxSteps, actionTimeout);
+                  logger.debug(`CUA click action completed successfully`);
+                  const executionTime = Date.now() - actionStartTime;
+                  return {
+                    success: true,
+                    actionIndex,
+                    executionTime,
+                    timestamp: getTimestamp(),
+                  };
+                } catch (error) {
+                  const errorMessage = error instanceof Error ? error.message : String(error);
+                  throw new Error(`CUA click failed: ${errorMessage}`);
+                }
+              } else {
+                // Use DOM-based click (observe→act pattern)
+                // Click action - use observe→act pattern for better reliability
+                // Only cache successful observe() results, not fallback actions
+                const observeTimeout = timeout;
+                let actions: any[] = [];
+
+                // Try observe with original instruction
+                try {
+                  actions = await stagehand.observe(`find the ${step.target}`, {
+                    timeout: observeTimeout,
+                  });
+                } catch (error) {
+                  logger.debug(`Observe failed for "${step.target}": ${error}`);
+                }
+
+                // If observe didn't find anything, try alternative phrasings
+                if (!actions || actions.length === 0) {
+                  const alternativePhrasings = [
+                    `find ${step.target}`,
+                    `locate ${step.target}`,
+                    `click ${step.target}`,
+                  ];
+
+                  for (const phrasing of alternativePhrasings) {
+                    try {
+                      logger.debug(`Retrying observe with alternative phrasing: "${phrasing}"`);
+                      actions = await stagehand.observe(phrasing, {
+                        timeout: observeTimeout,
+                      });
+                      if (actions && actions.length > 0) {
+                        logger.debug(`Found ${actions.length} elements with alternative phrasing`);
+                        break;
+                      }
+                    } catch (error) {
+                      logger.debug(`Alternative phrasing failed: ${error}`);
+                      continue;
                     }
-                  } catch (error) {
-                    logger.debug(`Alternative phrasing failed: ${error}`);
-                    continue;
                   }
                 }
-              }
 
-              // If observe succeeded, use cached action (only cache successful observe results)
-              if (actions && actions.length > 0) {
-                await stagehand.act(actions[0], { timeout });
-                const executionTime = Date.now() - actionStartTime;
-                return {
-                  success: true,
-                  actionIndex,
-                  executionTime,
-                  timestamp: getTimestamp(),
-                };
-              }
+                // If observe succeeded, use cached action (only cache successful observe results)
+                if (actions && actions.length > 0) {
+                  await stagehand.act(actions[0], { timeout });
+                  const executionTime = Date.now() - actionStartTime;
+                  return {
+                    success: true,
+                    actionIndex,
+                    executionTime,
+                    timestamp: getTimestamp(),
+                  };
+                }
 
-              // If observe failed completely, try direct act as last resort
-              // Note: Stagehand will still cache direct act() calls, but this is better than failing
-              logger.warn(
-                `Observe failed to find "${step.target}" after retries, using direct act as fallback`,
-              );
-              try {
-                await stagehand.act(`click the ${step.target}`, { timeout });
-                const executionTime = Date.now() - actionStartTime;
-                return {
-                  success: true,
-                  actionIndex,
-                  executionTime,
-                  timestamp: getTimestamp(),
-                };
-              } catch (error) {
-                // If direct act also fails, throw error
-                throw new Error(
-                  `Failed to find and click "${step.target}": observe returned empty, direct act failed: ${error instanceof Error ? error.message : String(error)}`,
+                // If observe failed completely, try direct act as last resort
+                // Note: Stagehand will still cache direct act() calls, but this is better than failing
+                logger.warn(
+                  `Observe failed to find "${step.target}" after retries, using direct act as fallback`,
                 );
+                try {
+                  await stagehand.act(`click the ${step.target}`, { timeout });
+                  const executionTime = Date.now() - actionStartTime;
+                  return {
+                    success: true,
+                    actionIndex,
+                    executionTime,
+                    timestamp: getTimestamp(),
+                  };
+                } catch (error) {
+                  // If direct act also fails, throw error
+                  throw new Error(
+                    `Failed to find and click "${step.target}": observe returned empty, direct act failed: ${error instanceof Error ? error.message : String(error)}`,
+                  );
+                }
               }
             }
 
@@ -233,6 +264,7 @@ export async function executeSequence(
   startTime: number,
   captureManager?: CaptureManager,
   onActionComplete?: (result: ActionResult) => void,
+  cuaManager?: CUAManager,
 ): Promise<ActionResult[]> {
   const results: ActionResult[] = [];
   const maxSteps = 100; // As per user's change
@@ -260,7 +292,7 @@ export async function executeSequence(
     }
 
     const step = sequence[i];
-    const result = await executeAction(stagehand, step, i, config, captureManager);
+    const result = await executeAction(stagehand, step, i, config, captureManager, cuaManager);
 
     results.push(result);
     

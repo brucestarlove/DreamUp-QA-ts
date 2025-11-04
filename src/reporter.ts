@@ -9,6 +9,7 @@ import { getTimestamp } from './utils/time.js';
 import type { CaptureResult, ScreenshotMetadata } from './capture.js';
 import type { ActionResult } from './interaction.js';
 import type { Issue } from './utils/errors.js';
+import type { CUAUsageMetrics } from './cua.js';
 import { createIssue, classifyError } from './utils/errors.js';
 
 export interface ActionTiming {
@@ -16,6 +17,14 @@ export interface ActionTiming {
   executionTime: number;
   timestamp: string;
   success: boolean;
+}
+
+export interface LLMUsageMetrics {
+  totalCalls: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+  estimatedCost: number; // USD
 }
 
 export interface TestResult {
@@ -28,7 +37,7 @@ export interface TestResult {
   timestamp: string;
   logs?: string;
   test_duration?: number;
-  cost_estimate?: number;
+  llm_usage?: LLMUsageMetrics;
 }
 
 /**
@@ -39,6 +48,7 @@ export function generateResult(
   captureResult: CaptureResult,
   startTime: number,
   additionalIssues: Issue[] = [],
+  cuaUsage?: CUAUsageMetrics,
 ): TestResult {
   const endTime = Date.now();
   const duration = endTime - startTime;
@@ -101,6 +111,17 @@ export function generateResult(
   // Add logs path if available
   if (captureResult.logsPath) {
     result.logs = captureResult.logsPath;
+  }
+
+  // Add LLM usage metrics if available
+  if (cuaUsage && cuaUsage.totalCalls > 0) {
+    result.llm_usage = {
+      totalCalls: cuaUsage.totalCalls,
+      totalInputTokens: cuaUsage.totalInputTokens,
+      totalOutputTokens: cuaUsage.totalOutputTokens,
+      totalTokens: cuaUsage.totalTokens,
+      estimatedCost: Number(cuaUsage.estimatedCost.toFixed(6)), // Round to 6 decimal places
+    };
   }
 
   return result;
