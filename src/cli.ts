@@ -60,9 +60,14 @@ program
       // Setup capture manager
       const captureManager = new CaptureManager(sessionDir);
 
-      // Initialize CUA manager if enabled
+      // Initialize CUA manager if enabled globally OR if any action has useCUA flag
+      const hasCUAInActions = config.sequence.some(
+        (step) => 'action' in step && step.action === 'click' && step.useCUA === true,
+      );
+      const shouldInitializeCUA = config.useCUA || hasCUAInActions;
+
       let cuaManager: CUAManager | undefined;
-      if (config.useCUA) {
+      if (shouldInitializeCUA) {
         spinner.start('Initializing Computer Use Agent...');
         try {
           cuaManager = new CUAManager(session.stagehand, {
@@ -71,6 +76,9 @@ program
           });
           await cuaManager.initialize();
           spinner.succeed('Computer Use Agent initialized');
+          logger.info(
+            `CUA enabled: ${config.useCUA ? 'globally' : 'per-action'} (${hasCUAInActions ? 'found in actions' : 'none'})`,
+          );
         } catch (error) {
           spinner.fail('Failed to initialize Computer Use Agent');
           logger.error('CUA initialization error:', error);
@@ -189,6 +197,19 @@ program
       console.log(chalk.cyan(`Score: ${testResult.playability_score.toFixed(2)}`));
       console.log(chalk.yellow(`Issues: ${testResult.issues.length}`));
       console.log(chalk.blue(`Duration: ${testResult.test_duration}s`));
+      
+      // Show action method breakdown
+      if (testResult.action_methods) {
+        const { cua, dom, none } = testResult.action_methods;
+        console.log(chalk.magenta(`Actions: CUA=${cua}, DOM=${dom}, Other=${none}`));
+      }
+      
+      // Show LLM usage if available
+      if (testResult.llm_usage) {
+        const usage = testResult.llm_usage;
+        console.log(chalk.cyan(`LLM Usage: ${usage.totalCalls} calls, ${usage.totalTokens} tokens, $${usage.estimatedCost.toFixed(4)}`));
+      }
+      
       console.log(chalk.gray(`Results: ${resultPath}`));
 
       if (testResult.issues.length > 0) {

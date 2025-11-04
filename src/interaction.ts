@@ -17,6 +17,7 @@ export interface ActionResult {
   actionIndex: number;
   executionTime?: number; // milliseconds
   timestamp?: string;
+  methodUsed?: 'cua' | 'dom' | 'none'; // Track which method was used for this action
 }
 
 /**
@@ -67,6 +68,7 @@ export async function executeAction(
             actionIndex,
             executionTime,
             timestamp: getTimestamp(),
+            methodUsed: 'none',
           };
         }
 
@@ -79,14 +81,18 @@ export async function executeAction(
               if (useCUA && cuaManager) {
                 // Use CUA for visual-based clicking
                 // Make instruction clear and single-action focused
-                // For simple clicks, use maxSteps: 1 to prevent looping
+                // CUA needs 2-3 steps minimum: screenshot → click → confirm
+                // But allow config to override for games that need more/fewer steps
                 const instruction = `Click on ${step.target}. This is a single click action - click once and immediately stop.`;
-                const maxSteps = Math.min(config.cuaMaxSteps ?? 1, 2); // Limit to 1-2 steps for simple clicks
-                const actionTimeout = timeout; // Use action timeout from config
+                const maxSteps = config.cuaMaxSteps ?? 3; // Default 3 steps (screenshot → click → confirm)
+                
+                // CUA actions need more time: ~5-7s per step, so 3 steps = ~20-30s minimum
+                // Use 2x the action timeout or 30s, whichever is higher
+                const cuaTimeout = Math.max(timeout * 2, 30000);
 
                 try {
-                  logger.debug(`CUA click action: "${instruction}" (maxSteps: ${maxSteps})`);
-                  await cuaManager.execute(instruction, maxSteps, actionTimeout);
+                  logger.debug(`CUA click action: "${instruction}" (maxSteps: ${maxSteps}, timeout: ${cuaTimeout}ms)`);
+                  await cuaManager.execute(instruction, maxSteps, cuaTimeout);
                   logger.debug(`CUA click action completed successfully`);
                   const executionTime = Date.now() - actionStartTime;
                   return {
@@ -94,6 +100,7 @@ export async function executeAction(
                     actionIndex,
                     executionTime,
                     timestamp: getTimestamp(),
+                    methodUsed: 'cua',
                   };
                 } catch (error) {
                   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -149,6 +156,7 @@ export async function executeAction(
                     actionIndex,
                     executionTime,
                     timestamp: getTimestamp(),
+                    methodUsed: 'dom',
                   };
                 }
 
@@ -165,6 +173,7 @@ export async function executeAction(
                     actionIndex,
                     executionTime,
                     timestamp: getTimestamp(),
+                    methodUsed: 'dom',
                   };
                 } catch (error) {
                   // If direct act also fails, throw error
@@ -195,6 +204,7 @@ export async function executeAction(
                 actionIndex,
                 executionTime,
                 timestamp: getTimestamp(),
+                methodUsed: 'dom',
               };
             }
 
@@ -218,6 +228,7 @@ export async function executeAction(
                 actionIndex,
                 executionTime,
                 timestamp: getTimestamp(),
+                methodUsed: 'none',
               };
             }
 
@@ -251,6 +262,7 @@ export async function executeAction(
       actionIndex,
       executionTime,
       timestamp: getTimestamp(),
+      methodUsed: 'none', // Failed actions don't have a method
     };
   }
 }
@@ -287,6 +299,7 @@ export async function executeSequence(
         actionIndex: i,
         executionTime: elapsed,
         timestamp: getTimestamp(),
+        methodUsed: 'none',
       });
       break;
     }

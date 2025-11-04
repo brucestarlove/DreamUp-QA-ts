@@ -27,6 +27,12 @@ export interface LLMUsageMetrics {
   estimatedCost: number; // USD
 }
 
+export interface ActionMethodBreakdown {
+  cua: number;
+  dom: number;
+  none: number; // wait, screenshot, failed actions
+}
+
 export interface TestResult {
   status: 'pass' | 'fail';
   playability_score: number;
@@ -34,6 +40,7 @@ export interface TestResult {
   screenshots: string[];
   screenshot_metadata?: ScreenshotMetadata[];
   action_timings?: ActionTiming[];
+  action_methods?: ActionMethodBreakdown; // Breakdown of CUA vs DOM usage
   timestamp: string;
   logs?: string;
   test_duration?: number;
@@ -94,6 +101,13 @@ export function generateResult(
       success: r.success,
     }));
 
+  // Calculate action method breakdown (CUA vs DOM)
+  const action_methods: ActionMethodBreakdown = {
+    cua: actionResults.filter((r) => r.methodUsed === 'cua').length,
+    dom: actionResults.filter((r) => r.methodUsed === 'dom').length,
+    none: actionResults.filter((r) => !r.methodUsed || r.methodUsed === 'none').length,
+  };
+
   // Add capture issues to the issues list
   issues.push(...captureResult.issues);
 
@@ -104,6 +118,7 @@ export function generateResult(
     screenshots,
     screenshot_metadata,
     action_timings,
+    action_methods,
     timestamp: getTimestamp(),
     test_duration: Math.round(duration / 1000), // seconds
   };

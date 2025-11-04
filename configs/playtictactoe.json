@@ -1,18 +1,18 @@
 {
-  "useCUA": true,
+  "useCUA": false,
   "cuaModel": "openai/computer-use-preview",
   "cuaMaxSteps": 3,
   "sequence": [
-    { "wait": 1000 },
-    { "action": "click", "target": "click the center square div in the game board" },
-    { "wait": 1000 },
-    { "action": "click", "target": "click on one of the nine square divs in the game board which does not have an X or O" },
-    { "wait": 1000 },
-    { "action": "click", "target": "click on one of the nine square divs in the game board which does not have an X or O" },
-    { "wait": 1000 },
+    { "action": "click", "target": "click the center square div in the game board", "useCUA": true },
+    { "wait": 250 },
+    { "action": "click", "target": "click on one of the nine square divs in the game board which does not have an X or O", "useCUA": true },
+    { "wait": 250 },
+    { "action": "click", "target": "click on one of the nine square divs in the game board which does not have an X or O", "useCUA": true },
+    { "wait": 250 },
     { "action": "screenshot" },
-    { "action": "click", "target": "click on one of the nine square divs in the game board which does not have an X or O" },
-    { "wait": 1000 },
+    { "wait": 250 },
+    { "action": "click", "target": "click on one of the nine square divs in the game board which does not have an X or O", "useCUA": true },
+    { "wait": 250 },
     { "action": "screenshot" }
   ],
   "timeouts": {

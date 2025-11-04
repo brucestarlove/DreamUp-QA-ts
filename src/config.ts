@@ -81,7 +81,7 @@ const defaultConfig: Config = {
   timeouts: {
     load: 30000,
     action: 10000,
-    total: 60000,
+    total: 45000, // 45 seconds for total QA testing time
   },
   useCUA: false,
   cuaModel: 'openai/computer-use-preview',

@@ -139,20 +139,54 @@ export class CUAManager {
         ? `${instruction}. This is a single click action. Click once and stop immediately.`
         : instruction;
 
-      // Use Promise.race to enforce timeout
+      // Execute agent - use AbortController for proper cleanup
+      let timeoutId: NodeJS.Timeout | null = null;
+      let isResolved = false;
+      let resolvedResult: any = null;
+
       const executePromise = this.agent.execute({
         instruction: explicitInstruction,
         maxSteps: steps,
+      }).then((result: any) => {
+        isResolved = true;
+        resolvedResult = result;
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        return result;
       });
 
-      // Add timeout protection
+      // Add timeout protection with early success detection
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error(`CUA execution timed out after ${actionTimeout}ms`));
+        timeoutId = setTimeout(() => {
+          if (!isResolved) {
+            reject(new Error(`CUA execution timed out after ${actionTimeout}ms`));
+          }
         }, actionTimeout);
       });
 
-      const result = await Promise.race([executePromise, timeoutPromise]);
+      // Race between execution and timeout
+      let result: any;
+      try {
+        result = await Promise.race([executePromise, timeoutPromise]);
+      } catch (error) {
+        // If timeout rejected but we actually succeeded, return the result
+        if (isResolved && resolvedResult) {
+          logger.debug('CUA execution succeeded but timeout was triggered, returning result anyway');
+          result = resolvedResult;
+        } else {
+          // Clean up timeout if still pending
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+          throw error;
+        }
+      } finally {
+        // Ensure timeout is always cleared
+        if (timeoutId && !isResolved) {
+          clearTimeout(timeoutId);
+        }
+      }
 
       // Extract usage metrics from result if available
       if (result && typeof result === 'object') {
@@ -206,11 +240,12 @@ export class CUAManager {
       const message = result?.message || '';
       const success = result?.success !== false; // Assume success unless explicitly false
       
-      logger.debug(`CUA execution completed. Success: ${success}, Message: ${message || 'N/A'}`);
+      logger.debug(`CUA execution completed. Success: ${success}, Message: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}`);
       
-      // If agent says it's done or succeeded, return immediately
-      if (success || message.toLowerCase().includes('done') || message.toLowerCase().includes('complete')) {
-        logger.debug('CUA agent reported completion, stopping execution');
+      // Early exit if agent reports success - don't wait for remaining steps
+      if (success || message.toLowerCase().includes('done') || message.toLowerCase().includes('complete') || 
+          message.toLowerCase().includes('successfully') || message.toLowerCase().includes('clicked')) {
+        logger.debug('CUA agent reported completion/success, returning result');
         return result;
       }
       
