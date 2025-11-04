@@ -12,9 +12,9 @@
     { "action": "screenshot" }
   ],
   "timeouts": {
-    "load": 3000,
-    "action": 2000,
-    "total": 3000
+    "load": 30000,
+    "action": 15000,
+    "total": 60000
   },
   "retries": 3,
   "metadata": {

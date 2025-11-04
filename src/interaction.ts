@@ -61,43 +61,64 @@ export async function executeAction(
           switch (step.action) {
             case 'click': {
               // Click action - use observe→act pattern for better reliability
+              // Only cache successful observe() results, not fallback actions
+              const observeTimeout = timeout;
+              let actions: any[] = [];
+              
+              // Try observe with original instruction
               try {
-                // First, try to observe the element
-                const actions = await Promise.race([
-                  stagehand.observe(`find the ${step.target}`),
-                  new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('Observe timeout')), timeout),
-                  ),
-                ]);
-
-                if (actions && actions.length > 0) {
-                  // Use cached action (no new LLM call)
-                  await Promise.race([
-                    stagehand.act(actions[0]),
-                    new Promise<never>((_, reject) =>
-                      setTimeout(() => reject(new Error('Act timeout')), timeout),
-                    ),
-                  ]);
-                } else {
-                  // Fallback to direct act
-                  await Promise.race([
-                    stagehand.act(`click the ${step.target}`),
-                    new Promise<never>((_, reject) =>
-                      setTimeout(() => reject(new Error('Act timeout')), timeout),
-                    ),
-                  ]);
-                }
+                actions = await stagehand.observe(`find the ${step.target}`, {
+                  timeout: observeTimeout,
+                });
               } catch (error) {
-                // Fallback to direct act if observe fails
-                logger.warn(`Observe failed, falling back to direct act: ${error}`);
-                await Promise.race([
-                  stagehand.act(`click the ${step.target}`),
-                  new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('Act timeout')), timeout),
-                  ),
-                ]);
+                logger.debug(`Observe failed for "${step.target}": ${error}`);
               }
-              return { success: true, actionIndex };
+
+              // If observe didn't find anything, try alternative phrasings
+              if (!actions || actions.length === 0) {
+                const alternativePhrasings = [
+                  `find ${step.target}`,
+                  `locate ${step.target}`,
+                  `click ${step.target}`,
+                ];
+
+                for (const phrasing of alternativePhrasings) {
+                  try {
+                    logger.debug(`Retrying observe with alternative phrasing: "${phrasing}"`);
+                    actions = await stagehand.observe(phrasing, {
+                      timeout: observeTimeout,
+                    });
+                    if (actions && actions.length > 0) {
+                      logger.debug(`Found ${actions.length} elements with alternative phrasing`);
+                      break;
+                    }
+                  } catch (error) {
+                    logger.debug(`Alternative phrasing failed: ${error}`);
+                    continue;
+                  }
+                }
+              }
+
+              // If observe succeeded, use cached action (only cache successful observe results)
+              if (actions && actions.length > 0) {
+                await stagehand.act(actions[0], { timeout });
+                return { success: true, actionIndex };
+              }
+
+              // If observe failed completely, try direct act as last resort
+              // Note: Stagehand will still cache direct act() calls, but this is better than failing
+              logger.warn(
+                `Observe failed to find "${step.target}" after retries, using direct act as fallback`,
+              );
+              try {
+                await stagehand.act(`click the ${step.target}`, { timeout });
+                return { success: true, actionIndex };
+              } catch (error) {
+                // If direct act also fails, throw error
+                throw new Error(
+                  `Failed to find and click "${step.target}": observe returned empty, direct act failed: ${error instanceof Error ? error.message : String(error)}`,
+                );
+              }
             }
 
             case 'press': {
@@ -106,13 +127,8 @@ export async function executeAction(
               const repeat = Math.min(step.repeat ?? 1, 100);
 
               for (let i = 0; i < repeat; i++) {
-                // Use act() with natural language for keypress
-                await Promise.race([
-                  stagehand.act(`press the ${step.key} key`, { timeout }),
-                  new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('Press timeout')), timeout),
-                  ),
-                ]);
+                // Use act() with natural language for keypress - pass timeout to Stagehand
+                await stagehand.act(`press the ${step.key} key`, { timeout });
                 // Small delay between key presses
                 if (i < repeat - 1) {
                   await sleep(50);
@@ -149,7 +165,8 @@ export async function executeAction(
   } catch (error) {
     logger.error(`Action ${actionIndex + 1} failed after retries:`, error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const issueType = classifyError(error, { isAction: true });
+    const errorObj = error instanceof Error ? error : new Error(String(error));
+    const issueType = classifyError(errorObj, { isAction: true });
     
     return {
       success: false,

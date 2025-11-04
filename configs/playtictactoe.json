@@ -2,15 +2,16 @@
   "sequence": [
     { "wait": 1000 },
     { "action": "screenshot" },
-    { "action": "click", "target": "any empty cell" },
-    { "action": "screenshot" },
-    { "action": "click", "target": "any empty cell" },
+    { "action": "click", "target": "click on one of the nine square divs in the game board" },
+    { "wait": 1000 },
+    { "action": "click", "target": "click on one of the nine square divs in the game board which does not have an X or O" },
+    { "wait": 1000 },
     { "action": "screenshot" }
   ],
   "timeouts": {
-    "load": 3000,
-    "action": 1000,
-    "total": 6000
+    "load": 30000,
+    "action": 15000,
+    "total": 60000
   },
   "retries": 3,
   "metadata": {
