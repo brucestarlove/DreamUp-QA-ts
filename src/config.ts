@@ -73,6 +73,9 @@ export const ConfigSchema = z.object({
   alwaysCUA: z.boolean().default(false), // If true, all actions use CUA by default (unless overridden per-action)
   cuaModel: z.string().optional(), // e.g., "openai/computer-use-preview"
   cuaMaxSteps: z.number().int().positive().max(20).default(3), // Max steps per CUA action
+  // Stagehand default model configuration (for act/observe operations)
+  // Examples: "openai/gpt-4o-mini" (cloud), "ollama/llama3.2:3b" (local via Ollama)
+  stagehandModel: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -93,6 +96,7 @@ const defaultConfig: Config = {
   alwaysCUA: false,
   cuaModel: 'openai/computer-use-preview',
   cuaMaxSteps: 3,
+  stagehandModel: 'openai/gpt-4o-mini', // Default model for act/observe operations
 };
 
 /**
@@ -125,6 +129,8 @@ export function loadConfig(configPath?: string): Config {
       alwaysCUA: validatedConfig.alwaysCUA ?? defaultConfig.alwaysCUA,
       cuaModel: validatedConfig.cuaModel ?? defaultConfig.cuaModel,
       cuaMaxSteps: validatedConfig.cuaMaxSteps ?? defaultConfig.cuaMaxSteps,
+      // Ensure Stagehand model default is applied
+      stagehandModel: validatedConfig.stagehandModel ?? defaultConfig.stagehandModel,
     };
   } catch (error) {
     if (error instanceof z.ZodError) {

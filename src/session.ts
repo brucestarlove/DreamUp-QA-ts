@@ -53,19 +53,53 @@ export class SessionManager {
   }
 
   /**
+   * Build model configuration for Stagehand, with Ollama support
+   */
+  private buildModelConfig(model: string): string | { modelName: string; apiKey?: string; baseURL?: string } {
+    // Check if this is an Ollama model (either "ollama/..." or contains "ollama")
+    const isOllamaModel = model.startsWith('ollama/') || model.toLowerCase().includes('ollama');
+    
+    if (isOllamaModel) {
+      // Extract Ollama model name (remove "ollama/" prefix if present)
+      const ollamaModelName = model.replace(/^ollama\//, '');
+      
+      // Ollama uses OpenAI-compatible API at localhost:11434/v1
+      // When using baseURL, modelName should be the raw model identifier that the API expects
+      // (without provider prefix, since baseURL handles the endpoint)
+      logger.info(`Configuring Ollama model: ${ollamaModelName} via http://localhost:11434/v1`);
+      logger.debug('Make sure Ollama is running (it should auto-start, or run: ollama serve)');
+      
+      return {
+        modelName: ollamaModelName, // Raw model name (e.g., "llama3.2:3b", "qwen3:4b", etc.)
+        baseURL: 'http://localhost:11434/v1',
+        apiKey: 'ollama', // Ollama doesn't require a real API key, but some clients expect it
+      };
+    }
+    
+    // Standard model - use string format (Stagehand will auto-load API key from env)
+    return model;
+  }
+
+  /**
    * Initialize Stagehand with BrowserBase environment
    */
-  async initialize(): Promise<Stagehand> {
+  async initialize(config?: Config): Promise<Stagehand> {
     logger.info('Initializing Stagehand with BrowserBase...');
 
     try {
+      // Get model from config or use default
+      const modelConfig = config?.stagehandModel || 'openai/gpt-4o-mini';
+      const stagehandModel = this.buildModelConfig(modelConfig);
+      
+      logger.debug(`Using Stagehand model: ${typeof stagehandModel === 'string' ? stagehandModel : stagehandModel.modelName}`);
+      
       this.stagehand = new Stagehand({
         env: 'BROWSERBASE',
         apiKey: process.env.BROWSERBASE_API_KEY,
         projectId: process.env.BROWSERBASE_PROJECT_ID,
         verbose: 2, // Enable verbose logging
         cacheDir: 'cache/qa-workflow-v1', // Deterministic caching
-        model: 'openai/gpt-4o-mini', // Default model, can be overridden
+        model: stagehandModel,
       });
 
       await this.stagehand.init();
@@ -74,7 +108,21 @@ export class SessionManager {
       return this.stagehand;
     } catch (error) {
       logger.error('Failed to initialize Stagehand:', error);
-      throw new Error(`Session initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Provide helpful error message if Ollama model is detected
+      if (config?.stagehandModel && (config.stagehandModel.startsWith('ollama/') || config.stagehandModel.toLowerCase().includes('ollama'))) {
+        throw new Error(
+          `Stagehand initialization failed with Ollama model. Make sure Ollama is installed and running:\n` +
+          `  1. Install Ollama: https://ollama.com/download\n` +
+          `  2. Pull the model: ollama pull ${config.stagehandModel.replace(/^ollama\//, '')}\n` +
+          `  3. Start Ollama (usually auto-starts): ollama serve\n` +
+          `  4. Verify it's running: curl http://localhost:11434/api/tags\n` +
+          `Original error: ${errorMessage}`,
+        );
+      }
+      
+      throw new Error(`Session initialization failed: ${errorMessage}`);
     }
   }
 
@@ -83,7 +131,7 @@ export class SessionManager {
    */
   async loadGame(url: string, config: Config): Promise<SessionResult> {
     if (!this.stagehand) {
-      await this.initialize();
+      await this.initialize(config);
     }
 
     if (!this.stagehand) {

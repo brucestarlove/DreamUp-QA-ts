@@ -13,6 +13,7 @@
     "total": 60000
   },
   "retries": 3,
+  "stagehandModel": "openai/gpt-4o-mini",
   "metadata": {
     "genre": "platformer",
     "notes": "Example config for testing"
