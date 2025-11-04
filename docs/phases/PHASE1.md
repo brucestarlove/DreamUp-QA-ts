@@ -100,11 +100,11 @@
 - [ ] Create session directory structure
 
 ### 1.8 Integration Test
-- [ ] Test end-to-end flow with simple game URL
-- [ ] Verify CLI accepts arguments
-- [ ] Verify browser launches and loads page
-- [ ] Verify at least one action executes
-- [ ] Verify screenshot is captured
-- [ ] Verify JSON output is generated
+- [x] Test end-to-end flow with simple game URL
+- [x] Verify CLI accepts arguments
+- [x] Verify browser launches and loads page
+- [x] Verify at least one action executes
+- [x] Verify screenshot is captured
+- [x] Verify JSON output is generated
 
 **Deliverable:** Working CLI that can load a game, execute one action, capture a screenshot, and output JSON.

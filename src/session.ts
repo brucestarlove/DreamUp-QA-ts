@@ -75,8 +75,88 @@ export class SessionManager {
 
       logger.info('Page loaded successfully');
 
-      // Capture baseline screenshot after load
-      // This will be handled by the capture manager, but we ensure page is ready
+      // Optional: Optimize DOM by hiding/removing non-essential elements
+      // This can improve action reliability by reducing DOM noise
+      // Phase 1: Basic implementation (can be enhanced in Phase 4)
+      try {
+        // Default selectors for common ad elements (always applied)
+        const defaultHideSelectors = [
+          'iframe[src*="ads"]',
+          'iframe[src*="advertisement"]',
+          'div[id*="ad"]',
+          'div[class*="ad"]',
+          'div[id*="advertisement"]',
+          'div[class*="advertisement"]',
+        ];
+
+        // Merge default with config-provided selectors
+        const hideSelectors = [
+          ...defaultHideSelectors,
+          ...(config.domOptimization?.hideSelectors || []),
+        ];
+        const removeSelectors = config.domOptimization?.removeSelectors || [];
+
+        // Only run if there are selectors to process
+        if (hideSelectors.length > defaultHideSelectors.length || removeSelectors.length > 0) {
+
+          await page.evaluate(
+            (args: { hide: string[]; remove: string[] }) => {
+              // Code runs in browser context where document exists
+              // Hide elements (preserves layout)
+              args.hide.forEach((selector) => {
+                try {
+                  // @ts-expect-error - document exists in browser context
+                  const elements = document.querySelectorAll(selector);
+                  elements.forEach((el: Element) => {
+                    // Element.style exists in browser context
+                    (el as any).style.display = 'none';
+                  });
+                } catch (e) {
+                  // Silently ignore selector errors
+                }
+              });
+
+              // Remove elements completely (may affect layout)
+              args.remove.forEach((selector) => {
+                try {
+                  // @ts-expect-error - document exists in browser context
+                  const elements = document.querySelectorAll(selector);
+                  elements.forEach((el: Element) => {
+                    // Element.remove() exists in browser context
+                    (el as any).remove();
+                  });
+                } catch (e) {
+                  // Silently ignore selector errors
+                }
+              });
+            },
+            { hide: hideSelectors, remove: removeSelectors },
+          );
+
+          logger.debug(
+            `DOM optimization applied (${hideSelectors.length} hide, ${removeSelectors.length} remove)`,
+          );
+        } else {
+          // Always apply defaults even if no custom selectors
+          await page.evaluate((hide: string[]) => {
+            hide.forEach((selector) => {
+              try {
+                // @ts-expect-error - document exists in browser context
+                const elements = document.querySelectorAll(selector);
+                elements.forEach((el: Element) => {
+                  (el as any).style.display = 'none';
+                });
+              } catch (e) {
+                // Silently ignore selector errors
+              }
+            });
+          }, defaultHideSelectors);
+          logger.debug('DOM optimization applied (defaults only)');
+        }
+      } catch (error) {
+        // Non-critical - continue even if DOM optimization fails
+        logger.debug('DOM optimization skipped (non-critical)');
+      }
 
       return {
         page,

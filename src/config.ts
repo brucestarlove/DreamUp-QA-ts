@@ -39,12 +39,21 @@ const TimeoutsSchema = z.object({
 // Controls mapping (optional, for future use)
 const ControlsSchema = z.record(z.array(z.string())).optional();
 
+// DOM optimization configuration (optional)
+const DomOptimizationSchema = z
+  .object({
+    hideSelectors: z.array(z.string()).optional(), // Additional CSS selectors to hide
+    removeSelectors: z.array(z.string()).optional(), // Selectors to remove (not just hide)
+  })
+  .optional();
+
 // Main config schema
 export const ConfigSchema = z.object({
   sequence: z.array(SequenceStepSchema).min(1),
   controls: ControlsSchema,
   timeouts: TimeoutsSchema.optional(),
   retries: z.number().int().min(0).max(10).default(3),
+  domOptimization: DomOptimizationSchema,
   metadata: z
     .object({
       genre: z.string().optional(),

@@ -55,7 +55,11 @@ Create a JSON config file with the following structure:
     "action": 10000,
     "total": 60000
   },
-  "retries": 3
+  "retries": 3,
+  "domOptimization": {
+    "hideSelectors": ["div[class*='sidebar']", "nav"],
+    "removeSelectors": ["div[id*='popup']"]
+  }
 }
 ```
 
@@ -80,6 +84,24 @@ Create a JSON config file with the following structure:
   ```json
   { "wait": 2000 }
   ```
+
+### DOM Optimization
+
+Optionally hide or remove non-game elements to improve action reliability:
+
+- `hideSelectors`: Array of CSS selectors to hide (preserves layout)
+- `removeSelectors`: Array of CSS selectors to remove completely
+
+Default behavior: Common ad elements are automatically hidden. Add custom selectors for game-specific elements.
+
+```json
+{
+  "domOptimization": {
+    "hideSelectors": ["div[class*='sidebar']", "nav", "header"],
+    "removeSelectors": ["div[id*='popup']"]
+  }
+}
+```
 
 ## Output
 
