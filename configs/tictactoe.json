@@ -1,0 +1,21 @@
+{
+  "sequence": [
+    { "action": "screenshot" },
+    { "action": "click", "target": "Start Tic Tac Toe button" },
+    { "wait": 1500 },
+    { "action": "click", "target": "Play" },
+    { "wait": 1000 },
+    { "action": "screenshot" },
+    { "action": "click", "target": "any empty cell" }
+  ],
+  "timeouts": {
+    "load": 30000,
+    "action": 10000,
+    "total": 60000
+  },
+  "retries": 3,
+  "metadata": {
+    "genre": "puzzle",
+    "notes": "tic tac toe game at https://www.htmlgames.com/game/Tic+Tac+Toe"
+  }
+}
