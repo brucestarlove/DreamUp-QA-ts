@@ -1,0 +1,21 @@
+{
+  "sequence": [
+    { "action": "screenshot" },
+    { "action": "click", "target": "start button" },
+    { "wait": 1000 },
+    { "action": "press", "key": "ArrowRight", "repeat": 5 },
+    { "wait": 2000 },
+    { "action": "screenshot" }
+  ],
+  "timeouts": {
+    "load": 30000,
+    "action": 10000,
+    "total": 60000
+  },
+  "retries": 3,
+  "metadata": {
+    "genre": "platformer",
+    "notes": "Example config for testing"
+  }
+}
+
