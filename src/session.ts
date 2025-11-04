@@ -5,6 +5,8 @@
 import { Stagehand } from '@browserbasehq/stagehand';
 import { logger } from './utils/logger.js';
 import type { Config } from './config.js';
+import { retryWithBackoff, isRetryableError } from './utils/retry.js';
+import { createIssue, classifyError, type Issue } from './utils/errors.js';
 
 export interface SessionResult {
   page: ReturnType<Stagehand['context']['pages']>[0];
@@ -18,9 +20,35 @@ export interface SessionResult {
 export class SessionManager {
   private stagehand: Stagehand | null = null;
   private isHeadless: boolean;
+  private sessionState: 'idle' | 'loading' | 'active' | 'error' | 'closed' = 'idle';
+  private issues: Issue[] = [];
 
   constructor(isHeadless: boolean = true) {
     this.isHeadless = isHeadless;
+  }
+
+  /**
+   * Get current session state
+   */
+  getState(): 'idle' | 'loading' | 'active' | 'error' | 'closed' {
+    return this.sessionState;
+  }
+
+  /**
+   * Get collected issues
+   */
+  getIssues(): Issue[] {
+    return [...this.issues];
+  }
+
+  /**
+   * Set session state
+   */
+  private setState(newState: 'idle' | 'loading' | 'active' | 'error' | 'closed'): void {
+    if (this.sessionState !== newState) {
+      logger.debug(`Session state: ${this.sessionState} → ${newState}`);
+      this.sessionState = newState;
+    }
   }
 
   /**
@@ -50,7 +78,7 @@ export class SessionManager {
   }
 
   /**
-   * Load a game URL and return the page
+   * Load a game URL and return the page with retry logic
    */
   async loadGame(url: string, config: Config): Promise<SessionResult> {
     if (!this.stagehand) {
@@ -61,19 +89,68 @@ export class SessionManager {
       throw new Error('Stagehand not initialized');
     }
 
+    this.setState('loading');
     logger.info(`Loading game URL: ${url}`);
 
     const page = this.stagehand.context.pages()[0];
     const context = this.stagehand.context;
+    const retries = config.retries ?? 3;
+    const loadTimeout = config.timeouts?.load ?? 30000;
+
+    // Retry page load with exponential backoff
+    try {
+      await retryWithBackoff(
+        async () => {
+          // Navigate to the game URL
+          await page.goto(url, {
+            waitUntil: 'domcontentloaded',
+            timeoutMs: loadTimeout,
+          });
+
+          logger.info('Page loaded successfully');
+          this.setState('active');
+
+          // Verify page loaded (basic check for blank screen)
+          const pageContent = await page.evaluate(() => {
+            // @ts-expect-error - document exists in browser context
+            return document.body?.innerText?.length || 0;
+          });
+
+          if (pageContent === 0) {
+            throw new Error('Page appears to be blank after load');
+          }
+        },
+        {
+          maxAttempts: retries + 1, // +1 for initial attempt
+          baseDelayMs: 1000,
+          maxDelayMs: 10000,
+          shouldRetry: (error) => {
+            // Only retry on retryable errors (timeouts, network issues)
+            return isRetryableError(error);
+          },
+        },
+      );
+    } catch (error) {
+      this.setState('error');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      
+      // Record load timeout issue
+      const issueType = classifyError(errorObj, { isLoad: true });
+      this.issues.push(createIssue(issueType, `Failed to load game URL after ${retries} retries: ${errorMessage}`));
+      
+      logger.error(`Failed to load game URL after ${retries} retries:`, error);
+
+      // If headless fails, try headed mode
+      if (this.isHeadless && issueType === 'load_timeout') {
+        logger.warn('Headless mode failed, attempting headed fallback...');
+        return this.loadGameHeaded(url, config);
+      }
+
+      throw error;
+    }
 
     try {
-      // Navigate to the game URL
-      await page.goto(url, {
-        waitUntil: 'domcontentloaded',
-        timeoutMs: config.timeouts?.load ?? 30000,
-      });
-
-      logger.info('Page loaded successfully');
 
       // Optional: Optimize DOM by hiding/removing non-essential elements
       // This can improve action reliability by reducing DOM noise
@@ -164,15 +241,15 @@ export class SessionManager {
         stagehand: this.stagehand,
       };
     } catch (error) {
-      logger.error('Failed to load game URL:', error);
-
-      // If headless fails, try headed mode
-      if (this.isHeadless) {
-        logger.warn('Headless mode failed, attempting headed fallback...');
-        return this.loadGameHeaded(url, config);
-      }
-
-      throw error;
+      this.setState('error');
+      logger.error('Failed during DOM optimization or page setup:', error);
+      
+      // Non-critical error, continue with page that was loaded
+      return {
+        page,
+        context,
+        stagehand: this.stagehand,
+      };
     }
   }
 
@@ -182,11 +259,20 @@ export class SessionManager {
   private async loadGameHeaded(url: string, config: Config): Promise<SessionResult> {
     logger.info('Retrying with headed browser...');
 
+    // Record headless incompatibility issue
+    this.issues.push(
+      createIssue(
+        'headless_incompatibility',
+        'Game failed to load in headless mode, falling back to headed mode',
+      ),
+    );
+
     // Close current session
     await this.cleanup();
+    this.setState('idle');
 
-    // Reinitialize with headed mode (would need to check Stagehand API for this)
-    // For now, we'll retry with same settings
+    // Reinitialize with same settings (headed mode not configurable in Stagehand v3)
+    // The retry may succeed due to timing or network recovery
     this.stagehand = new Stagehand({
       env: 'BROWSERBASE',
       apiKey: process.env.BROWSERBASE_API_KEY,
@@ -197,20 +283,39 @@ export class SessionManager {
     });
 
     await this.stagehand.init();
+    this.setState('loading');
 
     const page = this.stagehand.context.pages()[0];
     const context = this.stagehand.context;
 
-    await page.goto(url, {
-      waitUntil: 'domcontentloaded',
-      timeoutMs: config.timeouts?.load ?? 30000,
-    });
+    try {
+      await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeoutMs: config.timeouts?.load ?? 30000,
+      });
 
-    return {
-      page,
-      context,
-      stagehand: this.stagehand,
-    };
+      // Verify page loaded
+      const pageContent = await page.evaluate(() => {
+        // @ts-expect-error - document exists in browser context
+        return document.body?.innerText?.length || 0;
+      });
+
+      if (pageContent === 0) {
+        throw new Error('Page appears to be blank after load in headed mode');
+      }
+
+      this.setState('active');
+      logger.info('Page loaded successfully in headed mode');
+
+      return {
+        page,
+        context,
+        stagehand: this.stagehand,
+      };
+    } catch (error) {
+      this.setState('error');
+      throw error;
+    }
   }
 
   /**
@@ -230,15 +335,28 @@ export class SessionManager {
    * Cleanup and close the session
    */
   async cleanup(): Promise<void> {
-    if (this.stagehand) {
+    if (this.stagehand && this.sessionState !== 'closed') {
       logger.info('Cleaning up session...');
       try {
         // Close browser context using Stagehand v3 API
         await this.stagehand.context.close();
+        this.setState('closed');
       } catch (error) {
         logger.warn('Error during cleanup:', error);
+        this.setState('error');
+        
+        // Detect browser crash errors
+        if (error instanceof Error) {
+          const issueType = classifyError(error);
+          if (issueType === 'browser_crash') {
+            this.issues.push(
+              createIssue('browser_crash', 'Browser crashed during cleanup'),
+            );
+          }
+        }
+      } finally {
+        this.stagehand = null;
       }
-      this.stagehand = null;
     }
   }
 }

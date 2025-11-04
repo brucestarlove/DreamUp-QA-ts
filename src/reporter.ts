@@ -8,11 +8,13 @@ import { logger } from './utils/logger.js';
 import { getTimestamp } from './utils/time.js';
 import type { CaptureResult } from './capture.js';
 import type { ActionResult } from './interaction.js';
+import type { Issue } from './utils/errors.js';
+import { createIssue, classifyError } from './utils/errors.js';
 
 export interface TestResult {
   status: 'pass' | 'fail';
   playability_score: number;
-  issues: string[];
+  issues: Issue[];
   screenshots: string[];
   timestamp: string;
   logs?: string;
@@ -27,22 +29,28 @@ export function generateResult(
   actionResults: ActionResult[],
   captureResult: CaptureResult,
   startTime: number,
+  additionalIssues: Issue[] = [],
 ): TestResult {
   const endTime = Date.now();
   const duration = endTime - startTime;
 
-  // Collect issues from failed actions
-  const issues: string[] = [];
-  const failedActions = actionResults.filter((r) => !r.success);
+  // Collect issues from failed actions and additional issues
+  const issues: Issue[] = [...additionalIssues];
   
-  if (failedActions.length > 0) {
-    issues.push(`${failedActions.length} action(s) failed`);
-    failedActions.forEach((r) => {
-      if (r.error) {
-        issues.push(`action_${r.actionIndex + 1}: ${r.error}`);
-      }
-    });
-  }
+  // Convert failed actions to structured issues
+  const failedActions = actionResults.filter((r) => !r.success);
+  failedActions.forEach((r) => {
+    if (r.error) {
+      const issueType = classifyError(r.error, { isAction: true });
+      issues.push(
+        createIssue(
+          issueType,
+          `Action ${r.actionIndex + 1} failed: ${r.error}`,
+          r.actionIndex,
+        ),
+      );
+    }
+  });
 
   // Determine status
   const status: 'pass' | 'fail' = issues.length === 0 ? 'pass' : 'fail';
@@ -55,6 +63,9 @@ export function generateResult(
 
   // Collect screenshot filenames
   const screenshots = captureResult.screenshots.map((s) => s.filename);
+
+  // Add capture issues to the issues list
+  issues.push(...captureResult.issues);
 
   const result: TestResult = {
     status,

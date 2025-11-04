@@ -53,6 +53,7 @@ export const ConfigSchema = z.object({
   controls: ControlsSchema,
   timeouts: TimeoutsSchema.optional(),
   retries: z.number().int().min(0).max(10).default(3),
+  actionRetries: z.number().int().min(0).max(5).default(2), // Retries per action
   domOptimization: DomOptimizationSchema,
   metadata: z
     .object({
@@ -71,6 +72,7 @@ const defaultConfig: Config = {
     { action: 'screenshot' }, // Baseline screenshot
   ],
   retries: 3,
+  actionRetries: 2,
   timeouts: {
     load: 30000,
     action: 10000,

@@ -65,7 +65,7 @@ program
 
       // Execute action sequence
       spinner.start('Executing test sequence...');
-      const actionResults = await executeSequence(session.stagehand, config, (result) => {
+      const actionResults = await executeSequence(session.stagehand, config, startTime, (result) => {
         if (!result.success) {
           spinner.warn(`Action ${result.actionIndex + 1} failed: ${result.error}`);
         }
@@ -85,15 +85,66 @@ program
       const logsPath = await captureManager.saveConsoleLogs(logs);
       spinner.succeed('Console logs collected');
 
+      // Collect all issues from session and capture managers
+      const sessionIssues = sessionManager.getIssues();
+      const captureResult = captureManager.getResult(logsPath || undefined);
+      const allIssues = [...sessionIssues, ...captureResult.issues];
+
       // Generate and write result
       spinner.start('Generating test report...');
-      const captureResult = captureManager.getResult(logsPath || undefined);
-      const testResult = generateResult(actionResults, captureResult, startTime);
+      let testResult;
+      let resultPath: string;
+      
+      try {
+        testResult = generateResult(actionResults, captureResult, startTime, allIssues);
 
-      // Note: Model override (--model) and LLM evaluation (--llm) are placeholders for Phase 5
+        // Note: Model override (--model) and LLM evaluation (--llm) are placeholders for Phase 5
 
-      const resultPath = writeResult(testResult, sessionDir);
-      spinner.succeed('Test report generated');
+        resultPath = writeResult(testResult, sessionDir);
+        spinner.succeed('Test report generated');
+      } catch (error) {
+        spinner.warn('Failed to generate full report, creating minimal report');
+        logger.error('Report generation failed:', error);
+        
+        // Generate minimal report to ensure output is always created
+        try {
+          const minimalResult = {
+            status: 'fail' as const,
+            playability_score: 0.0,
+            issues: [
+              ...allIssues,
+              {
+                type: 'action_failed' as const,
+                description: `Report generation failed: ${error instanceof Error ? error.message : String(error)}`,
+                timestamp: new Date().toISOString(),
+              },
+            ],
+            screenshots: captureResult.screenshots.map((s) => s.filename),
+            timestamp: new Date().toISOString(),
+            test_duration: Math.round((Date.now() - startTime) / 1000),
+          };
+          resultPath = writeResult(minimalResult, sessionDir);
+        } catch (minimalError) {
+          // Last resort: write basic JSON
+          const { writeFileSync } = await import('fs');
+          const emergencyPath = join(sessionDir, 'output.json');
+          writeFileSync(
+            emergencyPath,
+            JSON.stringify(
+              {
+                status: 'fail',
+                error: 'Failed to generate report',
+                timestamp: new Date().toISOString(),
+              },
+              null,
+              2,
+            ),
+            'utf-8',
+          );
+          resultPath = emergencyPath;
+          logger.error('Emergency report written:', emergencyPath);
+        }
+      }
 
       // Cleanup
       await sessionManager.cleanup();
@@ -109,7 +160,8 @@ program
       if (testResult.issues.length > 0) {
         console.log('\n' + chalk.red('Issues:'));
         testResult.issues.forEach((issue) => {
-          console.log(chalk.red(`  - ${issue}`));
+          const actionInfo = issue.actionIndex !== undefined ? ` [Action ${issue.actionIndex + 1}]` : '';
+          console.log(chalk.red(`  - [${issue.type}]${actionInfo} ${issue.description}`));
         });
       }
 

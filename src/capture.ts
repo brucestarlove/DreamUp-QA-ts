@@ -7,6 +7,7 @@ import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { logger } from './utils/logger.js';
 import { getTimestamp } from './utils/time.js';
+import { createIssue, type Issue } from './utils/errors.js';
 
 export interface ScreenshotMetadata {
   filename: string;
@@ -19,6 +20,7 @@ export interface ScreenshotMetadata {
 export interface CaptureResult {
   screenshots: ScreenshotMetadata[];
   logsPath?: string;
+  issues: Issue[]; // Issues from capture failures
 }
 
 /**
@@ -27,12 +29,24 @@ export interface CaptureResult {
 export class CaptureManager {
   private sessionDir: string;
   private screenshots: ScreenshotMetadata[] = [];
+  private issues: Issue[] = [];
 
   constructor(sessionDir: string) {
     this.sessionDir = sessionDir;
     // Create directories
-    mkdirSync(join(sessionDir, 'screenshots'), { recursive: true });
-    mkdirSync(join(sessionDir, 'logs'), { recursive: true });
+    try {
+      mkdirSync(join(sessionDir, 'screenshots'), { recursive: true });
+      mkdirSync(join(sessionDir, 'logs'), { recursive: true });
+    } catch (error) {
+      logger.warn('Failed to create capture directories:', error);
+    }
+  }
+
+  /**
+   * Get captured issues
+   */
+  getIssues(): Issue[] {
+    return [...this.issues];
   }
 
   /**
@@ -67,6 +81,10 @@ export class CaptureManager {
       return metadata;
     } catch (error) {
       logger.error('Failed to take screenshot:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.issues.push(
+        createIssue('screenshot_failed', `Failed to capture screenshot: ${errorMessage}`),
+      );
       return null;
     }
   }
@@ -92,6 +110,10 @@ export class CaptureManager {
       return logPath;
     } catch (error) {
       logger.error('Failed to save console logs:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.issues.push(
+        createIssue('log_failed', `Failed to save console logs: ${errorMessage}`),
+      );
       return null;
     }
   }
@@ -110,6 +132,7 @@ export class CaptureManager {
     return {
       screenshots: this.getScreenshots(),
       logsPath,
+      issues: this.getIssues(),
     };
   }
 }
