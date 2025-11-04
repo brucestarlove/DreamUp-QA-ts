@@ -1,5 +1,6 @@
 {
   "sequence": [
+    { "wait": 1000 },
     { "action": "screenshot" },
     { "action": "click", "target": "Start Tic Tac Toe button" },
     { "wait": 1500 },
@@ -9,9 +10,9 @@
     { "action": "click", "target": "any empty cell" }
   ],
   "timeouts": {
-    "load": 30000,
-    "action": 10000,
-    "total": 60000
+    "load": 3000,
+    "action": 3000,
+    "total": 6000
   },
   "retries": 3,
   "metadata": {
