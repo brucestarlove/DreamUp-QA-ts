@@ -60,11 +60,14 @@ program
       // Setup capture manager
       const captureManager = new CaptureManager(sessionDir);
 
-      // Initialize CUA manager if enabled globally OR if any action has useCUA flag
+      // Initialize CUA manager if enabled globally OR if any action has useCUA flag OR uses agent action
       const hasCUAInActions = config.sequence.some(
         (step) => 'action' in step && step.action === 'click' && step.useCUA === true,
       );
-      const shouldInitializeCUA = config.useCUA || hasCUAInActions;
+      const hasAgentActions = config.sequence.some(
+        (step) => 'action' in step && step.action === 'agent',
+      );
+      const shouldInitializeCUA = config.useCUA || hasCUAInActions || hasAgentActions;
 
       let cuaManager: CUAManager | undefined;
       if (shouldInitializeCUA) {
@@ -76,8 +79,9 @@ program
           });
           await cuaManager.initialize();
           spinner.succeed('Computer Use Agent initialized');
+          const cuaReason = hasAgentActions ? 'agent actions' : config.useCUA ? 'globally' : hasCUAInActions ? 'per-action' : 'none';
           logger.info(
-            `CUA enabled: ${config.useCUA ? 'globally' : 'per-action'} (${hasCUAInActions ? 'found in actions' : 'none'})`,
+            `CUA enabled: ${cuaReason}`,
           );
         } catch (error) {
           spinner.fail('Failed to initialize Computer Use Agent');

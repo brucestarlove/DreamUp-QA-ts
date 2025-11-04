@@ -264,6 +264,106 @@ export class CUAManager {
   }
 
   /**
+   * Execute an autonomous agent task with high-level instruction
+   * This is for multi-step autonomous gameplay, not individual clicks
+   */
+  async executeAgent(instruction: string, maxSteps?: number, timeout?: number): Promise<any> {
+    await this.initialize(); // Ensure agent is initialized
+
+    const steps = maxSteps || 20; // Default 20 steps for autonomous gameplay
+    const agentTimeout = timeout || 120000; // Default 2 minutes for autonomous tasks
+    logger.info(`CUA agent executing autonomous task: "${instruction.substring(0, 100)}${instruction.length > 100 ? '...' : ''}" (maxSteps: ${steps}, timeout: ${agentTimeout}ms)`);
+
+    try {
+      // For autonomous gameplay, use the instruction as-is (don't add "single click" constraints)
+      const executePromise = this.agent.execute({
+        instruction: instruction,
+        maxSteps: steps,
+      }).then((result: any) => {
+        return result;
+      });
+
+      // Add timeout protection
+      let timeoutId: NodeJS.Timeout | null = null;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`CUA agent execution timed out after ${agentTimeout}ms`));
+        }, agentTimeout);
+      });
+
+      // Race between execution and timeout
+      let result: any;
+      try {
+        result = await Promise.race([executePromise, timeoutPromise]);
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
+
+      // Extract usage metrics from result if available
+      if (result && typeof result === 'object') {
+        const usage = (result as any).usage;
+        if (usage) {
+          const inputTokens = usage.inputTokens || usage.promptTokens || 0;
+          const outputTokens = usage.outputTokens || usage.completionTokens || 0;
+          const totalTokens = usage.totalTokens || inputTokens + outputTokens;
+
+          this.usage.totalCalls += 1;
+          this.usage.totalInputTokens += inputTokens;
+          this.usage.totalOutputTokens += outputTokens;
+          this.usage.totalTokens += totalTokens;
+
+          const model = this.config.model || 'openai/computer-use-preview';
+          const cost = calculateCost(inputTokens, outputTokens, model);
+          this.usage.estimatedCost += cost;
+
+          logger.debug(
+            `CUA agent usage: ${inputTokens} input + ${outputTokens} output = ${totalTokens} total tokens ($${cost.toFixed(4)})`,
+          );
+        } else {
+          // Estimate usage for autonomous tasks (much larger than single clicks)
+          const estimatedInputTokens = Math.ceil(instruction.length / 4) + 5000; // ~5000 for multiple screenshots
+          const estimatedOutputTokens = 500; // More reasoning for autonomous tasks
+          const estimatedTotalTokens = estimatedInputTokens + estimatedOutputTokens;
+
+          this.usage.totalCalls += 1;
+          this.usage.totalInputTokens += estimatedInputTokens;
+          this.usage.totalOutputTokens += estimatedOutputTokens;
+          this.usage.totalTokens += estimatedTotalTokens;
+
+          const model = this.config.model || 'openai/computer-use-preview';
+          const cost = calculateCost(estimatedInputTokens, estimatedOutputTokens, model);
+          this.usage.estimatedCost += cost;
+
+          logger.debug(
+            `CUA agent usage (estimated): ${estimatedInputTokens} input + ${estimatedOutputTokens} output = ${estimatedTotalTokens} total tokens ($${cost.toFixed(4)})`,
+          );
+        }
+      } else {
+        this.usage.totalCalls += 1;
+        logger.debug('CUA agent execution completed but usage metrics not available');
+      }
+
+      // Check result
+      const message = result?.message || '';
+      const success = result?.success !== false;
+      
+      logger.info(`CUA agent completed. Success: ${success}, Steps: ${result?.stepsExecuted || 'unknown'}`);
+      
+      return result;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('timed out')) {
+        logger.warn(`CUA agent execution timed out after ${agentTimeout}ms`);
+        throw error;
+      }
+      
+      logger.error(`CUA agent execution failed: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
    * Get usage metrics
    */
   getUsageMetrics(): CUAUsageMetrics {

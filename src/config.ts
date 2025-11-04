@@ -24,6 +24,12 @@ const SequenceStepSchema = z.union([
   z.object({
     action: z.literal('screenshot'),
   }),
+  // Agent action: { action: "agent", instruction: "play until win", maxSteps?: 30 }
+  z.object({
+    action: z.literal('agent'),
+    instruction: z.string(),
+    maxSteps: z.number().int().positive().max(100).optional(), // Max steps for agent execution
+  }),
   // Wait: { wait: 2000 }
   z.object({
     wait: z.number().int().positive(),

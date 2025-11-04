@@ -232,6 +232,40 @@ export async function executeAction(
               };
             }
 
+            case 'agent': {
+              // Agent action - autonomous multi-step gameplay using CUA
+              if (!cuaManager) {
+                throw new Error('Agent action requires CUA to be enabled. Set useCUA: true or configure cuaModel.');
+              }
+
+              const instruction = step.instruction;
+              const maxSteps = step.maxSteps || 20; // Default 20 steps for autonomous gameplay
+              
+              // For autonomous agent tasks, use a longer timeout (2 minutes or config total timeout)
+              const agentTimeout = Math.max(timeout * 8, config.timeouts?.total || 120000);
+
+              try {
+                logger.info(`Executing autonomous agent task: "${instruction.substring(0, 100)}${instruction.length > 100 ? '...' : ''}" (maxSteps: ${maxSteps})`);
+                const result = await cuaManager.executeAgent(instruction, maxSteps, agentTimeout);
+                
+                const executionTime = Date.now() - actionStartTime;
+                const success = result?.success !== false;
+                
+                logger.info(`Agent task completed. Success: ${success}, Steps: ${result?.stepsExecuted || 'unknown'}, Message: ${result?.message?.substring(0, 100) || 'N/A'}`);
+                
+                return {
+                  success: success,
+                  actionIndex,
+                  executionTime,
+                  timestamp: getTimestamp(),
+                  methodUsed: 'cua',
+                };
+              } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                throw new Error(`Agent task failed: ${errorMessage}`);
+              }
+            }
+
             default:
               throw new Error(`Unknown action type: ${(step as { action: string }).action}`);
           }
