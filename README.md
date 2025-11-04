@@ -99,7 +99,8 @@ Results are written to `results/<session-id>/output.json`:
 ## Environment Variables
 
 - `BROWSERBASE_API_KEY` - BrowserBase API key (required)
-- `OPENAI_API_KEY` - OpenAI API key (for LLM evaluation, future)
+- `BROWSERBASE_PROJECT_ID` - BrowserBase project ID (required)
+- `OPENAI_API_KEY` - OpenAI API key (required for Stagehand LLM operations)
 
 ## Development
 

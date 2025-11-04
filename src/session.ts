@@ -32,6 +32,8 @@ export class SessionManager {
     try {
       this.stagehand = new Stagehand({
         env: 'BROWSERBASE',
+        apiKey: process.env.BROWSERBASE_API_KEY,
+        projectId: process.env.BROWSERBASE_PROJECT_ID,
         verbose: 2, // Enable verbose logging
         cacheDir: 'cache/qa-workflow-v1', // Deterministic caching
         model: 'openai/gpt-4o-mini', // Default model, can be overridden
@@ -107,6 +109,8 @@ export class SessionManager {
     // For now, we'll retry with same settings
     this.stagehand = new Stagehand({
       env: 'BROWSERBASE',
+      apiKey: process.env.BROWSERBASE_API_KEY,
+      projectId: process.env.BROWSERBASE_PROJECT_ID,
       verbose: 2,
       cacheDir: 'cache/qa-workflow-v1',
       model: 'openai/gpt-4o-mini',
