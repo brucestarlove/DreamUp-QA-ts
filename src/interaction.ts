@@ -239,6 +239,47 @@ export async function executeAction(
               };
             }
 
+            case 'observe': {
+              // Observe action - test if elements are visible to the accessibility tree
+              // This is useful for debugging element visibility
+              const observeTarget = step.target;
+              
+              try {
+                logger.info(`Observing for: "${observeTarget}"`);
+                const actions = await stagehand.observe(`find ${observeTarget}`, { timeout });
+                
+                if (actions && actions.length > 0) {
+                  logger.info(`✓ Found ${actions.length} element(s) in accessibility tree:`);
+                  actions.forEach((action, idx) => {
+                    logger.info(`  [${idx + 1}] ${action.method || 'unknown'} - ${JSON.stringify(action.selector || action).substring(0, 100)}`);
+                  });
+                } else {
+                  logger.warn(`✗ No elements found in accessibility tree for: "${observeTarget}"`);
+                  logger.warn(`  This suggests the elements may not be accessible via DOM-based methods`);
+                }
+                
+                const executionTime = Date.now() - actionStartTime;
+                return {
+                  success: true, // Observe always succeeds (it's a test, not an action)
+                  actionIndex,
+                  executionTime,
+                  timestamp: getTimestamp(),
+                  methodUsed: 'none', // Observe is just a check
+                };
+              } catch (error) {
+                logger.error(`Observe failed for "${observeTarget}":`, error);
+                const executionTime = Date.now() - actionStartTime;
+                return {
+                  success: false,
+                  error: `Observe failed: ${error instanceof Error ? error.message : String(error)}`,
+                  actionIndex,
+                  executionTime,
+                  timestamp: getTimestamp(),
+                  methodUsed: 'none',
+                };
+              }
+            }
+
             case 'agent': {
               // Agent action - autonomous multi-step gameplay
               // Check if this specific agent action uses CUA (defaults to false, or global alwaysCUA)

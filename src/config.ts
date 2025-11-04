@@ -24,6 +24,12 @@ const SequenceStepSchema = z.union([
   z.object({
     action: z.literal('screenshot'),
   }),
+  // Observe action: { action: "observe", target: "find the game board squares" }
+  // Used for debugging - tests if elements are visible to the accessibility tree
+  z.object({
+    action: z.literal('observe'),
+    target: z.string(), // What to observe for
+  }),
   // Agent action: { action: "agent", instruction: "play until win", maxSteps?: 30, useCUA?: false }
   z.object({
     action: z.literal('agent'),
