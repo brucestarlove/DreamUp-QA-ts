@@ -65,7 +65,7 @@ program
 
       // Execute action sequence
       spinner.start('Executing test sequence...');
-      const actionResults = await executeSequence(session.stagehand, config, startTime, (result) => {
+      const actionResults = await executeSequence(session.stagehand, config, startTime, captureManager, (result) => {
         if (!result.success) {
           spinner.warn(`Action ${result.actionIndex + 1} failed: ${result.error}`);
         }

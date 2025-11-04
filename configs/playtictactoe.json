@@ -1,9 +1,13 @@
 {
   "sequence": [
     { "wait": 1000 },
-    { "action": "screenshot" },
-    { "action": "click", "target": "click on one of the nine square divs in the game board" },
+    { "action": "click", "target": "click the center square div in the game board" },
     { "wait": 1000 },
+    { "action": "click", "target": "click on one of the nine square divs in the game board which does not have an X or O" },
+    { "wait": 1000 },
+    { "action": "click", "target": "click on one of the nine square divs in the game board which does not have an X or O" },
+    { "wait": 1000 },
+    { "action": "screenshot" },
     { "action": "click", "target": "click on one of the nine square divs in the game board which does not have an X or O" },
     { "wait": 1000 },
     { "action": "screenshot" }

@@ -6,16 +6,25 @@ import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { logger } from './utils/logger.js';
 import { getTimestamp } from './utils/time.js';
-import type { CaptureResult } from './capture.js';
+import type { CaptureResult, ScreenshotMetadata } from './capture.js';
 import type { ActionResult } from './interaction.js';
 import type { Issue } from './utils/errors.js';
 import { createIssue, classifyError } from './utils/errors.js';
+
+export interface ActionTiming {
+  actionIndex: number;
+  executionTime: number;
+  timestamp: string;
+  success: boolean;
+}
 
 export interface TestResult {
   status: 'pass' | 'fail';
   playability_score: number;
   issues: Issue[];
   screenshots: string[];
+  screenshot_metadata?: ScreenshotMetadata[];
+  action_timings?: ActionTiming[];
   timestamp: string;
   logs?: string;
   test_duration?: number;
@@ -61,8 +70,19 @@ export function generateResult(
   const successfulActions = actionResults.filter((r) => r.success).length;
   const playability_score = totalActions > 0 ? successfulActions / totalActions : 0.0;
 
-  // Collect screenshot filenames
+  // Collect screenshot filenames and metadata
   const screenshots = captureResult.screenshots.map((s) => s.filename);
+  const screenshot_metadata = captureResult.screenshots;
+
+  // Collect action timings
+  const action_timings: ActionTiming[] = actionResults
+    .filter((r) => r.executionTime !== undefined && r.timestamp !== undefined)
+    .map((r) => ({
+      actionIndex: r.actionIndex,
+      executionTime: r.executionTime!,
+      timestamp: r.timestamp!,
+      success: r.success,
+    }));
 
   // Add capture issues to the issues list
   issues.push(...captureResult.issues);
@@ -72,6 +92,8 @@ export function generateResult(
     playability_score,
     issues,
     screenshots,
+    screenshot_metadata,
+    action_timings,
     timestamp: getTimestamp(),
     test_duration: Math.round(duration / 1000), // seconds
   };

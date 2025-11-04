@@ -22,6 +22,7 @@ export class SessionManager {
   private isHeadless: boolean;
   private sessionState: 'idle' | 'loading' | 'active' | 'error' | 'closed' = 'idle';
   private issues: Issue[] = [];
+  private consoleLogs: string[] = [];
 
   constructor(isHeadless: boolean = true) {
     this.isHeadless = isHeadless;
@@ -92,7 +93,8 @@ export class SessionManager {
     this.setState('loading');
     logger.info(`Loading game URL: ${url}`);
 
-    const page = this.stagehand.context.pages()[0];
+    // Use stagehand.page (Playwright-compatible) - cast needed for TypeScript
+    const page = (this.stagehand as any).page || this.stagehand.context.pages()[0];
     const context = this.stagehand.context;
     const retries = config.retries ?? 3;
     const loadTimeout = config.timeouts?.load ?? 30000;
@@ -109,6 +111,9 @@ export class SessionManager {
 
           logger.info('Page loaded successfully');
           this.setState('active');
+          
+          // Set up console log listeners
+          this.setupConsoleListeners(page);
 
           // Verify page loaded (basic check for blank screen)
           const pageContent = await page.evaluate(() => {
@@ -306,6 +311,9 @@ export class SessionManager {
 
       this.setState('active');
       logger.info('Page loaded successfully in headed mode');
+      
+      // Set up console log listeners
+      this.setupConsoleListeners(page);
 
       return {
         page,
@@ -324,11 +332,59 @@ export class SessionManager {
    * For Phase 1, we'll return empty array - full console capture will be in Phase 3
    */
   async getConsoleLogs(page: ReturnType<Stagehand['context']['pages']>[0]): Promise<string[]> {
-    // TODO: Implement proper console log capture in Phase 3
-    // Stagehand pages are Playwright-compatible, but console event listeners
-    // need to be set up before navigation, not after
-    logger.debug('Console log capture not yet implemented (Phase 3)');
-    return [];
+    return [...this.consoleLogs];
+  }
+  
+  /**
+   * Set up console log listeners using Playwright's event API
+   */
+  private setupConsoleListeners(page: ReturnType<Stagehand['context']['pages']>[0]): void {
+    try {
+      // stagehand.page is a Playwright Page object with all base methods available
+      // Cast to access event listener methods
+      const playwrightPage = page as any;
+      
+      // Check if page has the on() method
+      if (typeof playwrightPage.on !== 'function') {
+        logger.debug('Page object does not support event listeners');
+        return;
+      }
+      
+      // Listen for console messages
+      playwrightPage.on('console', (msg: any) => {
+        try {
+          const type = msg.type();
+          const text = msg.text();
+          const timestamp = new Date().toISOString();
+          const logEntry = `[${timestamp}] [${type.toUpperCase()}] ${text}`;
+          this.consoleLogs.push(logEntry);
+          
+          // Also log errors to our logger for visibility
+          if (type === 'error') {
+            logger.debug(`Console error: ${text}`);
+          }
+        } catch (error) {
+          // Silent failure - don't spam logs
+        }
+      });
+      
+      // Listen for page errors
+      playwrightPage.on('pageerror', (error: any) => {
+        try {
+          const timestamp = new Date().toISOString();
+          const logEntry = `[${timestamp}] [PAGEERROR] ${error.message}\n${error.stack || ''}`;
+          this.consoleLogs.push(logEntry);
+          logger.debug(`Page error: ${error.message}`);
+        } catch (err) {
+          // Silent failure
+        }
+      });
+      
+      logger.debug('Console listeners set up successfully');
+    } catch (error) {
+      logger.debug('Console listener setup skipped:', error);
+      // Non-critical - continue without console logging
+    }
   }
 
   /**

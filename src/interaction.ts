@@ -4,8 +4,9 @@
 
 import type { Stagehand } from '@browserbasehq/stagehand';
 import type { SequenceStep, Config } from './config.js';
+import type { CaptureManager } from './capture.js';
 import { logger } from './utils/logger.js';
-import { sleep } from './utils/time.js';
+import { sleep, getTimestamp } from './utils/time.js';
 import { retryWithBackoff, isRetryableError } from './utils/retry.js';
 import { classifyError } from './utils/errors.js';
 
@@ -13,6 +14,8 @@ export interface ActionResult {
   success: boolean;
   error?: string;
   actionIndex: number;
+  executionTime?: number; // milliseconds
+  timestamp?: string;
 }
 
 /**
@@ -23,7 +26,9 @@ export async function executeAction(
   step: SequenceStep,
   actionIndex: number,
   config: Config,
+  captureManager?: CaptureManager,
 ): Promise<ActionResult> {
+  const actionStartTime = Date.now();
   const timeout = config.timeouts?.action ?? 10000;
   const actionRetries = config.actionRetries ?? 2;
 
@@ -54,7 +59,13 @@ export async function executeAction(
         if ('wait' in step) {
           // Wait action - no retry needed
           await sleep(step.wait);
-          return { success: true, actionIndex };
+          const executionTime = Date.now() - actionStartTime;
+          return {
+            success: true,
+            actionIndex,
+            executionTime,
+            timestamp: getTimestamp(),
+          };
         }
 
         if ('action' in step) {
@@ -102,7 +113,13 @@ export async function executeAction(
               // If observe succeeded, use cached action (only cache successful observe results)
               if (actions && actions.length > 0) {
                 await stagehand.act(actions[0], { timeout });
-                return { success: true, actionIndex };
+                const executionTime = Date.now() - actionStartTime;
+                return {
+                  success: true,
+                  actionIndex,
+                  executionTime,
+                  timestamp: getTimestamp(),
+                };
               }
 
               // If observe failed completely, try direct act as last resort
@@ -112,7 +129,13 @@ export async function executeAction(
               );
               try {
                 await stagehand.act(`click the ${step.target}`, { timeout });
-                return { success: true, actionIndex };
+                const executionTime = Date.now() - actionStartTime;
+                return {
+                  success: true,
+                  actionIndex,
+                  executionTime,
+                  timestamp: getTimestamp(),
+                };
               } catch (error) {
                 // If direct act also fails, throw error
                 throw new Error(
@@ -135,14 +158,36 @@ export async function executeAction(
                 }
               }
 
-              return { success: true, actionIndex };
+              const executionTime = Date.now() - actionStartTime;
+              return {
+                success: true,
+                actionIndex,
+                executionTime,
+                timestamp: getTimestamp(),
+              };
             }
 
             case 'screenshot': {
-              // Screenshot action - this is handled by capture manager
-              // Just return success, actual screenshot is taken elsewhere
-              logger.debug('Screenshot action triggered (handled by capture manager)');
-              return { success: true, actionIndex };
+              // Screenshot action - capture screenshot if captureManager is available
+              if (captureManager) {
+                try {
+                  const page = stagehand.context.pages()[0];
+                  await captureManager.takeScreenshot(page, `action_${actionIndex}`, actionIndex);
+                  logger.info(`Screenshot captured for action ${actionIndex + 1}`);
+                } catch (error) {
+                  logger.error('Failed to capture screenshot:', error);
+                  // Don't fail the action, just log the error
+                }
+              } else {
+                logger.debug('Screenshot action triggered but no capture manager available');
+              }
+              const executionTime = Date.now() - actionStartTime;
+              return {
+                success: true,
+                actionIndex,
+                executionTime,
+                timestamp: getTimestamp(),
+              };
             }
 
             default:
@@ -167,11 +212,14 @@ export async function executeAction(
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorObj = error instanceof Error ? error : new Error(String(error));
     const issueType = classifyError(errorObj, { isAction: true });
+    const executionTime = Date.now() - actionStartTime;
     
     return {
       success: false,
       error: `${issueType}: ${errorMessage}`,
       actionIndex,
+      executionTime,
+      timestamp: getTimestamp(),
     };
   }
 }
@@ -183,6 +231,7 @@ export async function executeSequence(
   stagehand: Stagehand,
   config: Config,
   startTime: number,
+  captureManager?: CaptureManager,
   onActionComplete?: (result: ActionResult) => void,
 ): Promise<ActionResult[]> {
   const results: ActionResult[] = [];
@@ -204,14 +253,27 @@ export async function executeSequence(
         success: false,
         error: `Total timeout exceeded after ${Math.round(elapsed / 1000)}s`,
         actionIndex: i,
+        executionTime: elapsed,
+        timestamp: getTimestamp(),
       });
       break;
     }
 
     const step = sequence[i];
-    const result = await executeAction(stagehand, step, i, config);
+    const result = await executeAction(stagehand, step, i, config, captureManager);
 
     results.push(result);
+    
+    // Auto-capture screenshot on failure
+    if (!result.success && captureManager) {
+      try {
+        const page = stagehand.context.pages()[0];
+        await captureManager.takeScreenshot(page, `error_action_${i}`, i);
+        logger.info(`Error screenshot captured for failed action ${i + 1}`);
+      } catch (error) {
+        logger.error('Failed to capture error screenshot:', error);
+      }
+    }
 
     if (onActionComplete) {
       onActionComplete(result);
