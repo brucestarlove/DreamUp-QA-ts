@@ -12,7 +12,7 @@ import { SessionManager } from './session.js';
 import { executeSequence } from './interaction.js';
 import { CaptureManager } from './capture.js';
 import { CUAManager } from './cua.js';
-import { generateResult, writeResult } from './reporter.js';
+import { generateResult, writeResult, type TestResult } from './reporter.js';
 import { generateSessionId } from './utils/time.js';
 import { logger } from './utils/logger.js';
 
@@ -60,14 +60,17 @@ program
       // Setup capture manager
       const captureManager = new CaptureManager(sessionDir);
 
-      // Initialize CUA manager if enabled globally OR if any action has useCUA flag OR uses agent action
-      const hasCUAInActions = config.sequence.some(
+      // Initialize CUA manager if:
+      // 1. Enabled globally (alwaysCUA: true)
+      // 2. Any click action has useCUA: true
+      // 3. Any agent action has useCUA: true (explicitly set)
+      const hasCUAInClickActions = config.sequence.some(
         (step) => 'action' in step && step.action === 'click' && step.useCUA === true,
       );
-      const hasAgentActions = config.sequence.some(
-        (step) => 'action' in step && step.action === 'agent',
+      const hasAgentActionsWithCUA = config.sequence.some(
+        (step) => 'action' in step && step.action === 'agent' && step.useCUA === true,
       );
-      const shouldInitializeCUA = config.useCUA || hasCUAInActions || hasAgentActions;
+      const shouldInitializeCUA = config.alwaysCUA || hasCUAInClickActions || hasAgentActionsWithCUA;
 
       let cuaManager: CUAManager | undefined;
       if (shouldInitializeCUA) {
@@ -79,7 +82,7 @@ program
           });
           await cuaManager.initialize();
           spinner.succeed('Computer Use Agent initialized');
-          const cuaReason = hasAgentActions ? 'agent actions' : config.useCUA ? 'globally' : hasCUAInActions ? 'per-action' : 'none';
+          const cuaReason = hasAgentActionsWithCUA ? 'agent actions' : config.alwaysCUA ? 'globally (alwaysCUA)' : hasCUAInClickActions ? 'per-action' : 'none';
           logger.info(
             `CUA enabled: ${cuaReason}`,
           );
@@ -117,16 +120,48 @@ program
       const successfulActions = actionResults.filter((r) => r.success).length;
       spinner.succeed(`Executed ${successfulActions}/${actionResults.length} actions successfully`);
 
-      // Capture final screenshot
+      // Capture final screenshot - check if page is still available
       spinner.start('Capturing final screenshot...');
-      await captureManager.takeScreenshot(session.page, 'end', actionResults.length);
-      spinner.succeed('Final screenshot captured');
+      try {
+        // Check if page is still available (browser connection may have died)
+        const pages = session.stagehand.context.pages();
+        const page = pages.length > 0 ? pages[0] : null;
+        
+        if (page) {
+          const screenshotResult = await captureManager.takeScreenshot(page, 'end', actionResults.length);
+          if (screenshotResult) {
+            spinner.succeed('Final screenshot captured');
+          } else {
+            spinner.warn('Final screenshot skipped (page unavailable)');
+          }
+        } else {
+          spinner.warn('Final screenshot skipped (browser connection closed)');
+          logger.warn('Cannot capture final screenshot: browser connection is closed');
+        }
+      } catch (error) {
+        spinner.warn('Failed to capture final screenshot');
+        logger.error('Final screenshot capture failed:', error);
+      }
 
-      // Collect console logs
+      // Collect console logs - check if page is still available
       spinner.start('Collecting console logs...');
-      const logs = await sessionManager.getConsoleLogs(session.page);
-      const logsPath = await captureManager.saveConsoleLogs(logs);
-      spinner.succeed('Console logs collected');
+      let logsPath: string | null = null;
+      try {
+        const pages = session.stagehand.context.pages();
+        const page = pages.length > 0 ? pages[0] : null;
+        const logs = page ? await sessionManager.getConsoleLogs(page) : [];
+        logsPath = await captureManager.saveConsoleLogs(logs);
+        if (logsPath) {
+          spinner.succeed('Console logs collected');
+        } else {
+          spinner.warn('Console logs skipped (page unavailable)');
+        }
+      } catch (error) {
+        spinner.warn('Failed to collect console logs');
+        logger.error('Console log collection failed:', error);
+        // Continue with empty logs
+        logsPath = await captureManager.saveConsoleLogs([]);
+      }
 
       // Collect all issues from session and capture managers
       const sessionIssues = sessionManager.getIssues();
@@ -138,11 +173,14 @@ program
 
       // Generate and write result
       spinner.start('Generating test report...');
-      let testResult;
+      let testResult: TestResult;
       let resultPath: string;
       
+      // Get config path (absolute path if provided)
+      const configPath = options.config ? join(process.cwd(), options.config) : undefined;
+      
       try {
-        testResult = generateResult(actionResults, captureResult, startTime, allIssues, cuaUsage);
+        testResult = generateResult(actionResults, captureResult, startTime, allIssues, cuaUsage, configPath);
 
         // Note: Model override (--model) and LLM evaluation (--llm) are placeholders for Phase 5
 
@@ -154,7 +192,7 @@ program
         
         // Generate minimal report to ensure output is always created
         try {
-          const minimalResult = {
+          const minimalResult: TestResult = {
             status: 'fail' as const,
             playability_score: 0.0,
             issues: [
@@ -169,24 +207,31 @@ program
             timestamp: new Date().toISOString(),
             test_duration: Math.round((Date.now() - startTime) / 1000),
           };
+          testResult = minimalResult;
           resultPath = writeResult(minimalResult, sessionDir);
         } catch (minimalError) {
           // Last resort: write basic JSON
           const { writeFileSync } = await import('fs');
           const emergencyPath = join(sessionDir, 'output.json');
-          writeFileSync(
-            emergencyPath,
-            JSON.stringify(
+          const emergencyResult: TestResult = {
+            status: 'fail',
+            playability_score: 0.0,
+            issues: [
               {
-                status: 'fail',
-                error: 'Failed to generate report',
+                type: 'action_failed',
+                description: 'Failed to generate report',
                 timestamp: new Date().toISOString(),
               },
-              null,
-              2,
-            ),
+            ],
+            screenshots: [],
+            timestamp: new Date().toISOString(),
+          };
+          writeFileSync(
+            emergencyPath,
+            JSON.stringify(emergencyResult, null, 2),
             'utf-8',
           );
+          testResult = emergencyResult;
           resultPath = emergencyPath;
           logger.error('Emergency report written:', emergencyPath);
         }
@@ -212,6 +257,19 @@ program
       if (testResult.llm_usage) {
         const usage = testResult.llm_usage;
         console.log(chalk.cyan(`LLM Usage: ${usage.totalCalls} calls, ${usage.totalTokens} tokens, $${usage.estimatedCost.toFixed(4)}`));
+      }
+      
+      // Show agent responses if available (for agent actions)
+      if (testResult.agent_responses && testResult.agent_responses.length > 0) {
+        console.log('\n' + chalk.bold('Agent Responses:'));
+        testResult.agent_responses.forEach((agentResult, index) => {
+          if (agentResult.message) {
+            console.log(chalk.green(`  ${index + 1}. ${agentResult.message}`));
+          }
+          if (agentResult.stepsExecuted !== undefined) {
+            console.log(chalk.gray(`     (${agentResult.stepsExecuted} steps executed)`));
+          }
+        });
       }
       
       console.log(chalk.gray(`Results: ${resultPath}`));

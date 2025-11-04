@@ -1,15 +1,13 @@
 {
-  "useCUA": false,
+  "alwaysCUA": false,
   "cuaModel": "openai/computer-use-preview",
   "cuaMaxSteps": 20,
   "sequence": [
     {
       "action": "agent",
-      "instruction": "Play tic-tac-toe until the game ends. Click on empty squares (those without X or O) to make your moves. The computer will play after you. Continue until you win, lose, or the game ends in a tie. Stop when the game is over.",
-      "maxSteps": 20
-    },
-    {
-      "action": "screenshot"
+      "instruction": "Play tic-tac-toe until the game ends. Click on empty squares (those without X or O) to make your moves. The computer will play after you. Continue until you win, lose, or the game ends in a tie. Take a screenshot after you make two moves. Stop when the game is over.",
+      "maxSteps": 20,
+      "useCUA": true
     }
   ],
   "timeouts": {

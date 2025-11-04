@@ -389,6 +389,8 @@ export class SessionManager {
 
   /**
    * Cleanup and close the session
+   * Note: CDP transport closed errors are normal during cleanup - they indicate
+   * the browser connection is closing gracefully.
    */
   async cleanup(): Promise<void> {
     if (this.stagehand && this.sessionState !== 'closed') {

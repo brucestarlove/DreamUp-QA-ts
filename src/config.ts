@@ -24,11 +24,12 @@ const SequenceStepSchema = z.union([
   z.object({
     action: z.literal('screenshot'),
   }),
-  // Agent action: { action: "agent", instruction: "play until win", maxSteps?: 30 }
+  // Agent action: { action: "agent", instruction: "play until win", maxSteps?: 30, useCUA?: false }
   z.object({
     action: z.literal('agent'),
     instruction: z.string(),
     maxSteps: z.number().int().positive().max(100).optional(), // Max steps for agent execution
+    useCUA: z.boolean().optional(), // Whether to use Computer Use Agent (defaults to false - must be explicitly enabled)
   }),
   // Wait: { wait: 2000 }
   z.object({
@@ -69,7 +70,7 @@ export const ConfigSchema = z.object({
     })
     .optional(),
   // CUA (Computer Use Agent) configuration
-  useCUA: z.boolean().default(false),
+  alwaysCUA: z.boolean().default(false), // If true, all actions use CUA by default (unless overridden per-action)
   cuaModel: z.string().optional(), // e.g., "openai/computer-use-preview"
   cuaMaxSteps: z.number().int().positive().max(20).default(3), // Max steps per CUA action
 });
@@ -89,7 +90,7 @@ const defaultConfig: Config = {
     action: 10000,
     total: 45000, // 45 seconds for total QA testing time
   },
-  useCUA: false,
+  alwaysCUA: false,
   cuaModel: 'openai/computer-use-preview',
   cuaMaxSteps: 3,
 };
@@ -121,7 +122,7 @@ export function loadConfig(configPath?: string): Config {
       ...validatedConfig,
       timeouts: mergedTimeouts,
       // Ensure CUA defaults are applied if not specified
-      useCUA: validatedConfig.useCUA ?? defaultConfig.useCUA,
+      alwaysCUA: validatedConfig.alwaysCUA ?? defaultConfig.alwaysCUA,
       cuaModel: validatedConfig.cuaModel ?? defaultConfig.cuaModel,
       cuaMaxSteps: validatedConfig.cuaMaxSteps ?? defaultConfig.cuaMaxSteps,
     };

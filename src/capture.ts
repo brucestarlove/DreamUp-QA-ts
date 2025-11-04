@@ -53,14 +53,26 @@ export class CaptureManager {
    * Take a screenshot and save it
    */
   async takeScreenshot(
-    page: ReturnType<Stagehand['context']['pages']>[0],
+    page: ReturnType<Stagehand['context']['pages']>[0] | undefined | null,
     label?: string,
     stepIndex?: number,
   ): Promise<ScreenshotMetadata | null> {
+    // Check if page exists - browser connection may have died
+    if (!page) {
+      logger.warn('Cannot take screenshot: page is not available (browser connection may have closed)');
+      return null;
+    }
+
     try {
       const timestamp = getTimestamp().replace(/[:.]/g, '-').slice(0, -5);
       const filename = label ? `${label}_${timestamp}.png` : `screenshot_${timestamp}.png`;
       const filepath = join(this.sessionDir, 'screenshots', filename);
+
+      // Check if page has screenshot method before calling
+      if (typeof page.screenshot !== 'function') {
+        logger.warn('Page does not have screenshot method available');
+        return null;
+      }
 
       // Take screenshot and save to file
       const buffer = await page.screenshot({ fullPage: false });
@@ -100,13 +112,20 @@ export class CaptureManager {
 
   /**
    * Save console logs
+   * Only saves if there are actual logs to save (not empty)
    */
   async saveConsoleLogs(logs: string[]): Promise<string | null> {
+    // Only save logs if there are actual log entries
+    if (!logs || logs.length === 0) {
+      logger.debug('No console logs to save');
+      return null;
+    }
+
     try {
       const logPath = join(this.sessionDir, 'logs', 'console.log');
       const logContent = logs.join('\n');
       writeFileSync(logPath, logContent, 'utf-8');
-      logger.info(`Console logs saved: ${logPath}`);
+      logger.info(`Console logs saved: ${logPath} (${logs.length} entries)`);
       return logPath;
     } catch (error) {
       logger.error('Failed to save console logs:', error);

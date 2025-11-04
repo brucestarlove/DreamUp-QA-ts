@@ -11,6 +11,12 @@ import { sleep, getTimestamp } from './utils/time.js';
 import { retryWithBackoff, isRetryableError } from './utils/retry.js';
 import { classifyError } from './utils/errors.js';
 
+export interface AgentResult {
+  message?: string; // Agent's completion message (e.g., "The game ended with a win for the computer")
+  stepsExecuted?: number; // Number of steps the agent actually executed
+  success?: boolean; // Agent's reported success status
+}
+
 export interface ActionResult {
   success: boolean;
   error?: string;
@@ -18,6 +24,7 @@ export interface ActionResult {
   executionTime?: number; // milliseconds
   timestamp?: string;
   methodUsed?: 'cua' | 'dom' | 'none'; // Track which method was used for this action
+  agentResult?: AgentResult; // Agent result data (for agent actions)
 }
 
 /**
@@ -75,8 +82,8 @@ export async function executeAction(
         if ('action' in step) {
           switch (step.action) {
             case 'click': {
-              // Check if CUA should be used (global flag or per-action override)
-              const useCUA = step.useCUA ?? config.useCUA ?? false;
+              // Check if CUA should be used (global alwaysCUA flag or per-action override)
+              const useCUA = step.useCUA ?? config.alwaysCUA ?? false;
 
               if (useCUA && cuaManager) {
                 // Use CUA for visual-based clicking
@@ -233,9 +240,12 @@ export async function executeAction(
             }
 
             case 'agent': {
-              // Agent action - autonomous multi-step gameplay using CUA
-              if (!cuaManager) {
-                throw new Error('Agent action requires CUA to be enabled. Set useCUA: true or configure cuaModel.');
+              // Agent action - autonomous multi-step gameplay
+              // Check if this specific agent action uses CUA (defaults to false, or global alwaysCUA)
+              const useCUA = step.useCUA !== undefined ? step.useCUA : (config.alwaysCUA ?? false);
+              
+              if (useCUA && !cuaManager) {
+                throw new Error('Agent action with useCUA requires CUA to be enabled. Set useCUA: true on the action, alwaysCUA: true in config, or configure cuaModel.');
               }
 
               const instruction = step.instruction;
@@ -245,13 +255,29 @@ export async function executeAction(
               const agentTimeout = Math.max(timeout * 8, config.timeouts?.total || 120000);
 
               try {
-                logger.info(`Executing autonomous agent task: "${instruction.substring(0, 100)}${instruction.length > 100 ? '...' : ''}" (maxSteps: ${maxSteps})`);
+                logger.info(`Executing agent task${useCUA ? ' (CUA)' : ' (DOM-based)'}: "${instruction.substring(0, 100)}${instruction.length > 100 ? '...' : ''}" (maxSteps: ${maxSteps})`);
+                
+                if (!useCUA) {
+                  throw new Error('Non-CUA agent actions not yet implemented. Please set useCUA: true on the action or alwaysCUA: true in config.');
+                }
+                
+                if (!cuaManager) {
+                  throw new Error('CUA manager not available');
+                }
+                
                 const result = await cuaManager.executeAgent(instruction, maxSteps, agentTimeout);
                 
                 const executionTime = Date.now() - actionStartTime;
                 const success = result?.success !== false;
                 
-                logger.info(`Agent task completed. Success: ${success}, Steps: ${result?.stepsExecuted || 'unknown'}, Message: ${result?.message?.substring(0, 100) || 'N/A'}`);
+                // Capture agent result data
+                const agentResult: AgentResult = {
+                  message: result?.message || undefined,
+                  stepsExecuted: result?.stepsExecuted || undefined,
+                  success: result?.success !== false ? result?.success : undefined,
+                };
+                
+                logger.info(`Agent task completed. Success: ${success}, Steps: ${agentResult.stepsExecuted || 'unknown'}, Message: ${agentResult.message?.substring(0, 100) || 'N/A'}`);
                 
                 return {
                   success: success,
@@ -259,6 +285,7 @@ export async function executeAction(
                   executionTime,
                   timestamp: getTimestamp(),
                   methodUsed: 'cua',
+                  agentResult: agentResult.message || agentResult.stepsExecuted ? agentResult : undefined,
                 };
               } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
@@ -346,9 +373,14 @@ export async function executeSequence(
     // Auto-capture screenshot on failure
     if (!result.success && captureManager) {
       try {
-        const page = stagehand.context.pages()[0];
-        await captureManager.takeScreenshot(page, `error_action_${i}`, i);
-        logger.info(`Error screenshot captured for failed action ${i + 1}`);
+        const pages = stagehand.context.pages();
+        const page = pages.length > 0 ? pages[0] : null;
+        if (page) {
+          await captureManager.takeScreenshot(page, `error_action_${i}`, i);
+          logger.info(`Error screenshot captured for failed action ${i + 1}`);
+        } else {
+          logger.warn(`Cannot capture error screenshot for action ${i + 1}: page not available`);
+        }
       } catch (error) {
         logger.error('Failed to capture error screenshot:', error);
       }
@@ -364,9 +396,11 @@ export async function executeSequence(
     }
 
     // Check timeout again after action (in case action took a long time)
+    // Leave some buffer (5 seconds) to capture final screenshot before timeout
     const elapsedAfterAction = Date.now() - startTime;
-    if (elapsedAfterAction >= totalTimeout) {
-      logger.warn(`Total timeout (${totalTimeout}ms) exceeded after action ${i + 1}`);
+    const timeoutBuffer = 5000; // 5 seconds buffer for final screenshot
+    if (elapsedAfterAction >= totalTimeout - timeoutBuffer) {
+      logger.warn(`Total timeout (${totalTimeout}ms) approaching, stopping execution to allow final screenshot capture`);
       break;
     }
   }
