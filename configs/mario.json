@@ -1,0 +1,35 @@
+{
+  "controls": {
+    "Jump": ["Space"]
+  },
+  "sequence": [
+    { "action": "screenshot" },
+    { "action": "click", "target": "start button" },
+    { "wait": 1000 },
+    { "action": "screenshot" },
+    { "action": "click", "target": "coin" },
+    { "wait": 500 },
+    { "action": "screenshot" },
+    { "action": "click", "target": "coin" },
+    { "wait": 500 },
+    { "action": "click", "target": "coin" },
+    { "wait": 500 },
+    { "action": "screenshot" },
+    { "action": "click", "target": "coin" },
+    { "wait": 500 },
+    { "action": "click", "target": "coin" },
+    { "wait": 1000 },
+    { "action": "screenshot" }
+  ],
+  "timeouts": {
+    "load": 10000,
+    "action": 5000,
+    "total": 20000
+  },
+  "retries": 3,
+  "actionRetries": 2,
+  "metadata": {
+    "genre": "platformer",
+    "notes": "Basic Mario-style auto-runner QA config. Mario runs automatically, player clicks to jump and collect coins. Tests basic platformer mechanics and coin collection with mouse interaction."
+  }
+}
