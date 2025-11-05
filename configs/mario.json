@@ -3,6 +3,7 @@
     "Jump": ["Space"]
   },
   "sequence": [
+    { "wait": 1000 },
     { "action": "screenshot" },
     { "action": "click", "target": "start button" },
     { "wait": 1000 },
