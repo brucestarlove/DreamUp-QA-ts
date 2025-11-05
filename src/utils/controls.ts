@@ -13,6 +13,9 @@ export type ControlAction =
   | 'MoveDown'
   | 'MoveLeft'
   | 'MoveRight'
+  | 'MoveHorizontal' // 1D axis: left/right movement (can bind to both keys)
+  | 'MoveVertical'   // 1D axis: up/down movement (can bind to both keys)
+  | 'Move2D'         // 2D axis: diagonal movement (requires 2 simultaneous keys)
   | 'Jump'
   | 'Action'
   | 'Confirm'

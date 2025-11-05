@@ -8,13 +8,15 @@ import { logger } from './utils/logger.js';
 
 // Schema for individual sequence steps
 const SequenceStepSchema = z.union([
-  // Click action: { action: "click", target: "start button", useCUA?: boolean }
+  // Click action: { action: "click", target: "start button", useCUA?: boolean, timeout?: number, model?: string }
   z.object({
     action: z.literal('click'),
     target: z.string(),
     useCUA: z.boolean().optional(), // Per-action CUA override
+    timeout: z.number().int().positive().optional(), // Per-action timeout override
+    model: z.string().optional(), // Per-action model override
   }),
-  // Press action: { action: "press", key: "ArrowRight", repeat?: 5, duration?: 500, alternateKeys?: ["Left", "Right"], delay?: 100 }
+  // Press action: { action: "press", key: "ArrowRight", repeat?: 5, duration?: 500, alternateKeys?: ["Left", "Right"], delay?: 100, timeout?: number }
   z.object({
     action: z.literal('press'),
     key: z.string().optional(), // Optional if alternateKeys is provided
@@ -22,6 +24,7 @@ const SequenceStepSchema = z.union([
     duration: z.number().int().positive().optional(), // Key hold duration in ms (for continuous press)
     alternateKeys: z.array(z.string()).optional(), // Keys to alternate between (e.g., ["Left", "Right"])
     delay: z.number().int().nonnegative().optional(), // Delay between presses in ms (default: 50ms)
+    timeout: z.number().int().positive().optional(), // Per-action timeout override
   }).refine(
     (data) => data.key || (data.alternateKeys && data.alternateKeys.length > 0),
     { message: 'Either "key" or "alternateKeys" must be provided' }
@@ -42,6 +45,16 @@ const SequenceStepSchema = z.union([
     instruction: z.string(),
     maxSteps: z.number().int().positive().max(100).optional(), // Max steps for agent execution
     useCUA: z.boolean().optional(), // Whether to use Computer Use Agent (defaults to false - must be explicitly enabled)
+  }),
+  // Axis action: { action: "axis", direction: "horizontal", value: 1.0, duration: 500 }
+  // Simulates continuous axis input (e.g., holding right for platformer movement)
+  z.object({
+    action: z.literal('axis'),
+    direction: z.enum(['horizontal', 'vertical', '2d']), // Axis direction
+    value: z.number().min(-1).max(1).optional(), // Axis value: -1 (left/down) to 1 (right/up), default 1
+    duration: z.number().int().positive().max(10000).optional(), // Duration in ms (clamped to 10s max)
+    keys: z.array(z.string()).optional(), // Optional: specific keys to use (otherwise derived from controls)
+    timeout: z.number().int().positive().optional(), // Per-action timeout override
   }),
   // Wait: { wait: 2000 }
   z.object({
