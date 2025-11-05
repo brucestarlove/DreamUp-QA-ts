@@ -48,6 +48,28 @@ export interface EvaluationResult extends EvaluationMetrics {
 }
 
 /**
+ * Calculate cost for OpenAI models (per 1M tokens)
+ */
+function calculateOpenAICost(promptTokens: number, completionTokens: number, model: string): number {
+  // Pricing per 1M tokens (as of 2024)
+  const pricing: Record<string, { input: number; output: number }> = {
+    'gpt-4o-mini': { input: 0.15, output: 0.60 },
+    'gpt-4o': { input: 2.50, output: 10.00 },
+    'gpt-4': { input: 30.00, output: 60.00 },
+    'gpt-3.5-turbo': { input: 0.50, output: 1.50 },
+  };
+  
+  // Parse model name (remove provider prefix if present)
+  const modelName = model.includes('/') ? model.split('/')[1] : model;
+  const prices = pricing[modelName] || pricing['gpt-4o-mini']; // Default to gpt-4o-mini pricing
+  
+  const inputCost = (promptTokens / 1_000_000) * prices.input;
+  const outputCost = (completionTokens / 1_000_000) * prices.output;
+  
+  return inputCost + outputCost;
+}
+
+/**
  * Get Stagehand metrics
  */
 export async function getStagehandMetrics(stagehand: Stagehand): Promise<{
@@ -66,6 +88,17 @@ export async function getStagehandMetrics(stagehand: Stagehand): Promise<{
     logger.debug('Failed to get Stagehand metrics:', error);
     return null;
   }
+}
+
+/**
+ * Calculate cost for evaluation tokens
+ */
+export function calculateEvaluationCost(
+  evaluationTokens?: { promptTokens: number; completionTokens: number },
+  model: string = 'gpt-4o-mini',
+): number {
+  if (!evaluationTokens) return 0;
+  return calculateOpenAICost(evaluationTokens.promptTokens, evaluationTokens.completionTokens, model);
 }
 
 // Cache directory for LLM evaluations

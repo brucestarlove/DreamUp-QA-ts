@@ -11,6 +11,7 @@ import type { ActionResult } from './interaction.js';
 import type { Issue } from './utils/errors.js';
 import type { CUAUsageMetrics } from './cua.js';
 import { createIssue, classifyError } from './utils/errors.js';
+import { calculateEvaluationCost } from './evaluation.js';
 
 export interface ActionTiming {
   actionIndex: number;
@@ -252,11 +253,13 @@ export function generateResult(
     let totalInput = 0;
     let totalOutput = 0;
     let totalTokens = 0;
+    let totalCalls = 0;
     
     if (evaluationResult.evaluationTokens) {
       totalInput += evaluationResult.evaluationTokens.promptTokens;
       totalOutput += evaluationResult.evaluationTokens.completionTokens;
       totalTokens += evaluationResult.evaluationTokens.totalTokens;
+      totalCalls += 1; // Count LLM evaluation call
     }
     
     if (evaluationResult.stagehandTokens) {
@@ -265,12 +268,17 @@ export function generateResult(
       totalTokens += evaluationResult.stagehandTokens.totalTokens;
     }
     
+    // Calculate cost for evaluation tokens
+    const evaluationCost = evaluationResult.evaluationTokens
+      ? calculateEvaluationCost(evaluationResult.evaluationTokens, 'gpt-4o-mini') // Default model, could be passed from config
+      : 0;
+    
     const llmUsage: LLMUsageMetrics = {
-      totalCalls: 0,
+      totalCalls,
       totalInputTokens: totalInput,
       totalOutputTokens: totalOutput,
       totalTokens: totalTokens,
-      estimatedCost: 0, // Cost calculation will be done separately if needed
+      estimatedCost: Number(evaluationCost.toFixed(6)),
       evaluationTokens: evaluationResult.evaluationTokens,
       stagehandTokens: evaluationResult.stagehandTokens,
     };
