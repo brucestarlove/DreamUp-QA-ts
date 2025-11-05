@@ -11,6 +11,7 @@ import type { ActionResult } from './interaction.js';
 import type { Issue } from './utils/errors.js';
 import type { CUAUsageMetrics } from './cua.js';
 import { createIssue, classifyError } from './utils/errors.js';
+import { calculateEvaluationCost } from './evaluation.js';
 
 export interface ActionTiming {
   actionIndex: number;
@@ -25,6 +26,16 @@ export interface LLMUsageMetrics {
   totalOutputTokens: number;
   totalTokens: number;
   estimatedCost: number; // USD
+  stagehandTokens?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  evaluationTokens?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
 }
 
 export interface ActionMethodBreakdown {
@@ -45,6 +56,19 @@ export interface TestResult {
   config_path?: string; // Path to the config file used
   status: 'pass' | 'fail';
   playability_score: number;
+  evaluation?: {
+    heuristic_score: number;
+    llm_score?: number;
+    llm_confidence?: number;
+    final_score: number;
+    llm_issues?: string[];
+    game_state?: {
+      game_over: boolean;
+      victory?: boolean;
+      score?: number;
+    };
+    cache_hit?: boolean;
+  };
   issues: Issue[];
   screenshots: string[];
   screenshot_metadata?: ScreenshotMetadata[];
@@ -66,6 +90,29 @@ export function generateResult(
   additionalIssues: Issue[] = [],
   cuaUsage?: CUAUsageMetrics,
   configPath?: string,
+  evaluationResult?: {
+    heuristicScore: number;
+    llmScore?: number;
+    llmConfidence?: number;
+    finalScore: number;
+    issues: string[];
+    gameState?: {
+      gameOver: boolean;
+      victory?: boolean;
+      score?: number;
+    };
+    evaluationTokens?: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    };
+    stagehandTokens?: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    };
+    cacheHit?: boolean;
+  },
 ): TestResult {
   const endTime = Date.now();
   const duration = endTime - startTime;
@@ -91,11 +138,12 @@ export function generateResult(
   // Determine status
   const status: 'pass' | 'fail' = issues.length === 0 ? 'pass' : 'fail';
 
-  // Calculate playability score (placeholder for now)
-  // Phase 1: Simple heuristic based on action success rate
-  const totalActions = actionResults.length;
-  const successfulActions = actionResults.filter((r) => r.success).length;
-  const playability_score = totalActions > 0 ? successfulActions / totalActions : 0.0;
+  // Use evaluation result if provided, otherwise fall back to simple heuristic
+  const playability_score = evaluationResult?.finalScore ?? (() => {
+    const totalActions = actionResults.length;
+    const successfulActions = actionResults.filter((r) => r.success).length;
+    return totalActions > 0 ? successfulActions / totalActions : 0.0;
+  })();
 
   // Collect screenshot filenames and metadata
   const screenshots = captureResult.screenshots.map((s) => s.filename);
@@ -155,17 +203,87 @@ export function generateResult(
     result.browser_console_logs = captureResult.logsPath;
   }
 
+  // Add evaluation results if available
+  if (evaluationResult) {
+    result.evaluation = {
+      heuristic_score: evaluationResult.heuristicScore,
+      llm_score: evaluationResult.llmScore,
+      llm_confidence: evaluationResult.llmConfidence,
+      final_score: evaluationResult.finalScore,
+      llm_issues: evaluationResult.issues.length > 0 ? evaluationResult.issues : undefined,
+      game_state: evaluationResult.gameState ? {
+        game_over: evaluationResult.gameState.gameOver,
+        victory: evaluationResult.gameState.victory,
+        score: evaluationResult.gameState.score,
+      } : undefined,
+      cache_hit: evaluationResult.cacheHit,
+    };
+  }
+
   // Add LLM usage metrics if available
   if (cuaUsage && cuaUsage.totalCalls > 0) {
-    const llmUsage = {
+    const llmUsage: LLMUsageMetrics = {
       totalCalls: cuaUsage.totalCalls,
       totalInputTokens: cuaUsage.totalInputTokens,
       totalOutputTokens: cuaUsage.totalOutputTokens,
       totalTokens: cuaUsage.totalTokens,
       estimatedCost: Number(cuaUsage.estimatedCost.toFixed(6)), // Round to 6 decimal places
     };
+    
+    // Add evaluation tokens if available
+    if (evaluationResult?.evaluationTokens) {
+      llmUsage.evaluationTokens = evaluationResult.evaluationTokens;
+      llmUsage.totalInputTokens += evaluationResult.evaluationTokens.promptTokens;
+      llmUsage.totalOutputTokens += evaluationResult.evaluationTokens.completionTokens;
+      llmUsage.totalTokens += evaluationResult.evaluationTokens.totalTokens;
+    }
+    
+    // Add Stagehand tokens if available
+    if (evaluationResult?.stagehandTokens) {
+      llmUsage.stagehandTokens = evaluationResult.stagehandTokens;
+      llmUsage.totalInputTokens += evaluationResult.stagehandTokens.promptTokens;
+      llmUsage.totalOutputTokens += evaluationResult.stagehandTokens.completionTokens;
+      llmUsage.totalTokens += evaluationResult.stagehandTokens.totalTokens;
+    }
+    
     result.llm_usage = llmUsage;
     result.cost_estimate = llmUsage; // Alias for PRD compatibility
+  } else if (evaluationResult?.evaluationTokens || evaluationResult?.stagehandTokens) {
+    // Only evaluation/Stagehand tokens (no CUA usage)
+    let totalInput = 0;
+    let totalOutput = 0;
+    let totalTokens = 0;
+    let totalCalls = 0;
+    
+    if (evaluationResult.evaluationTokens) {
+      totalInput += evaluationResult.evaluationTokens.promptTokens;
+      totalOutput += evaluationResult.evaluationTokens.completionTokens;
+      totalTokens += evaluationResult.evaluationTokens.totalTokens;
+      totalCalls += 1; // Count LLM evaluation call
+    }
+    
+    if (evaluationResult.stagehandTokens) {
+      totalInput += evaluationResult.stagehandTokens.promptTokens;
+      totalOutput += evaluationResult.stagehandTokens.completionTokens;
+      totalTokens += evaluationResult.stagehandTokens.totalTokens;
+    }
+    
+    // Calculate cost for evaluation tokens
+    const evaluationCost = evaluationResult.evaluationTokens
+      ? calculateEvaluationCost(evaluationResult.evaluationTokens, 'gpt-4o-mini') // Default model, could be passed from config
+      : 0;
+    
+    const llmUsage: LLMUsageMetrics = {
+      totalCalls,
+      totalInputTokens: totalInput,
+      totalOutputTokens: totalOutput,
+      totalTokens: totalTokens,
+      estimatedCost: Number(evaluationCost.toFixed(6)),
+      evaluationTokens: evaluationResult.evaluationTokens,
+      stagehandTokens: evaluationResult.stagehandTokens,
+    };
+    result.llm_usage = llmUsage;
+    result.cost_estimate = llmUsage;
   }
 
   // Reorder fields to match user's requirements: timestamp, test_duration, config_path, then status

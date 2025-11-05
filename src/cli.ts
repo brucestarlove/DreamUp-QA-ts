@@ -15,6 +15,7 @@ import { CUAManager } from './cua.js';
 import { generateResult, writeResult, type TestResult } from './reporter.js';
 import { generateSessionId } from './utils/time.js';
 import { logger } from './utils/logger.js';
+import { evaluatePlayability } from './evaluation.js';
 
 const program = new Command();
 
@@ -179,10 +180,46 @@ program
       // Get config path (absolute path if provided)
       const configPath = options.config ? join(process.cwd(), options.config) : undefined;
       
+      // Run evaluation (always run heuristic, LLM optional)
+      spinner.start('Evaluating playability...');
+      let evaluationResult;
       try {
-        testResult = generateResult(actionResults, captureResult, startTime, allIssues, cuaUsage, configPath);
-
-        // Note: Model override (--model) and LLM evaluation (--llm) are placeholders for Phase 5
+        // Get console logs for evaluation
+        const pages = session.stagehand.context.pages();
+        const page = pages.length > 0 ? pages[0] : null;
+        const consoleLogs = page ? await sessionManager.getConsoleLogs(page) : [];
+        
+        evaluationResult = await evaluatePlayability(
+          session.stagehand,
+          actionResults,
+          captureResult,
+          consoleLogs,
+          allIssues,
+          config,
+          gameUrl,
+          {
+            enableLLM: options.llm || false,
+            model: options.model || 'gpt-4o-mini',
+          },
+        );
+        
+        spinner.succeed('Playability evaluation completed');
+      } catch (error) {
+        spinner.warn('Evaluation failed, using heuristic-only score');
+        logger.warn('Evaluation error:', error);
+        // Continue without evaluation result
+      }
+      
+      try {
+        testResult = generateResult(
+          actionResults,
+          captureResult,
+          startTime,
+          allIssues,
+          cuaUsage,
+          configPath,
+          evaluationResult,
+        );
 
         resultPath = writeResult(testResult, sessionDir);
         spinner.succeed('Test report generated');

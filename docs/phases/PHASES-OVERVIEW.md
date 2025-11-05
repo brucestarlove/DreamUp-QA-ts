@@ -315,9 +315,6 @@ This document outlines the implementation phases from MVP to completion, based o
 - [ ] Scope extraction with selectors (after observe) to reduce tokens
 
 ### 5.2 LLM Evaluation Integration
-- [ ] Integrate Vercel AI SDK:
-  - Install `vercel/ai` and `@ai-sdk/openai` (or other providers)
-  - Configure API keys securely
 - [ ] Design evaluation prompts:
   - System: "You are a QA expert analyzing browser game test sessions"
   - User: Targeted questions about load, controls, completion

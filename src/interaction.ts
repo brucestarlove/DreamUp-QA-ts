@@ -26,6 +26,7 @@ export interface ActionResult {
   timestamp?: string;
   methodUsed?: 'cua' | 'dom' | 'none'; // Track which method was used for this action
   agentResult?: AgentResult; // Agent result data (for agent actions)
+  metadata?: Record<string, any>; // Additional metadata (e.g., keys pressed, axis values)
 }
 
 /**
@@ -40,7 +41,13 @@ export async function executeAction(
   cuaManager?: CUAManager,
 ): Promise<ActionResult> {
   const actionStartTime = Date.now();
-  const timeout = config.timeouts?.action ?? 10000;
+  
+  // Support per-action timeout overrides
+  const defaultTimeout = config.timeouts?.action ?? 10000;
+  const timeout = ('action' in step && 'timeout' in step && step.timeout) 
+    ? step.timeout 
+    : defaultTimeout;
+    
   const actionRetries = config.actionRetries ?? 2;
 
   // Validate controls schema if provided
@@ -197,7 +204,13 @@ export async function executeAction(
 
                 // If observe succeeded, use cached action (only cache successful observe results)
                 if (actions && actions.length > 0) {
-                  await stagehand.act(actions[0], { timeout });
+                  // Support per-action model override
+                  const actOptions: any = { timeout };
+                  if ('model' in step && step.model) {
+                    actOptions.modelName = step.model;
+                  }
+                  
+                  await stagehand.act(actions[0], actOptions);
                   const executionTime = Date.now() - actionStartTime;
                   return {
                     success: true,
@@ -380,6 +393,133 @@ export async function executeAction(
                   methodUsed: 'none',
                 };
               }
+            }
+
+            case 'axis': {
+              // Axis action - simulate continuous axis input (1D or 2D)
+              const direction = step.direction;
+              const value = step.value ?? 1.0; // Default to positive direction (right/up)
+              const duration = Math.min(step.duration ?? 500, 10000); // Clamp to 10s max
+              
+              // Determine keys to press based on axis direction and value
+              let keysToPress: string[] = [];
+              
+              if (step.keys) {
+                // Use explicit keys if provided
+                keysToPress = step.keys.map(k => {
+                  const actionKeys = resolveAction(k, config.controls);
+                  return actionKeys && actionKeys.length > 0 ? actionKeys[0] : resolveKeyName(k);
+                });
+              } else {
+                // Derive keys from controls mapping based on direction and value
+                if (direction === 'horizontal') {
+                  if (value > 0) {
+                    // Right
+                    const rightKeys = resolveAction('MoveRight', config.controls);
+                    if (rightKeys && rightKeys.length > 0) {
+                      keysToPress = [rightKeys[0]];
+                    } else {
+                      keysToPress = ['ArrowRight']; // Fallback
+                    }
+                  } else {
+                    // Left
+                    const leftKeys = resolveAction('MoveLeft', config.controls);
+                    if (leftKeys && leftKeys.length > 0) {
+                      keysToPress = [leftKeys[0]];
+                    } else {
+                      keysToPress = ['ArrowLeft']; // Fallback
+                    }
+                  }
+                } else if (direction === 'vertical') {
+                  if (value > 0) {
+                    // Up
+                    const upKeys = resolveAction('MoveUp', config.controls);
+                    if (upKeys && upKeys.length > 0) {
+                      keysToPress = [upKeys[0]];
+                    } else {
+                      keysToPress = ['ArrowUp']; // Fallback
+                    }
+                  } else {
+                    // Down
+                    const downKeys = resolveAction('MoveDown', config.controls);
+                    if (downKeys && downKeys.length > 0) {
+                      keysToPress = [downKeys[0]];
+                    } else {
+                      keysToPress = ['ArrowDown']; // Fallback
+                    }
+                  }
+                } else if (direction === '2d') {
+                  // 2D diagonal movement - requires 2 keys pressed simultaneously
+                  // For now, simulate with rapid alternation between keys
+                  const horizontalKeys = value > 0 
+                    ? resolveAction('MoveRight', config.controls)
+                    : resolveAction('MoveLeft', config.controls);
+                  const verticalKeys = value > 0
+                    ? resolveAction('MoveUp', config.controls)
+                    : resolveAction('MoveDown', config.controls);
+                  
+                  if (horizontalKeys && horizontalKeys.length > 0) {
+                    keysToPress.push(horizontalKeys[0]);
+                  }
+                  if (verticalKeys && verticalKeys.length > 0) {
+                    keysToPress.push(verticalKeys[0]);
+                  }
+                  
+                  // Fallback to arrow keys
+                  if (keysToPress.length === 0) {
+                    keysToPress = value > 0 
+                      ? ['ArrowRight', 'ArrowUp']
+                      : ['ArrowLeft', 'ArrowDown'];
+                  }
+                }
+              }
+              
+              if (keysToPress.length === 0) {
+                throw new Error(`No keys resolved for axis action: ${direction} (value: ${value})`);
+              }
+              
+              logger.debug(`Axis action: ${direction} (value: ${value}, duration: ${duration}ms, keys: [${keysToPress.join(', ')}])`);
+              
+              // Simulate axis input by holding/alternating keys for duration
+              const axisStartTime = Date.now();
+              let pressCount = 0;
+              
+              if (direction === '2d' && keysToPress.length > 1) {
+                // 2D: Alternate between keys rapidly
+                while (Date.now() - axisStartTime < duration) {
+                  for (const key of keysToPress) {
+                    await stagehand.act(`press the ${key} key`, { timeout });
+                    pressCount++;
+                    await sleep(30); // 30ms between presses for smooth diagonal
+                  }
+                }
+              } else {
+                // 1D: Hold single key (simulate with rapid presses)
+                const key = keysToPress[0];
+                while (Date.now() - axisStartTime < duration) {
+                  await stagehand.act(`press the ${key} key`, { timeout });
+                  pressCount++;
+                  await sleep(20); // 20ms for smooth hold simulation
+                }
+              }
+              
+              logger.debug(`Axis action completed: ${pressCount} presses in ${Date.now() - axisStartTime}ms`);
+              
+              const executionTime = Date.now() - actionStartTime;
+              return {
+                success: true,
+                actionIndex,
+                executionTime,
+                timestamp: getTimestamp(),
+                methodUsed: 'dom',
+                metadata: {
+                  direction,
+                  value,
+                  duration,
+                  keys: keysToPress,
+                  pressCount,
+                },
+              };
             }
 
             case 'agent': {

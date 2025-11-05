@@ -1,0 +1,56 @@
+{
+  "controls": {
+    "MoveUp": ["ArrowUp", "KeyW"],
+    "MoveDown": ["ArrowDown", "KeyS"],
+    "MoveLeft": ["ArrowLeft", "KeyA"],
+    "MoveRight": ["ArrowRight", "KeyD"],
+    "Jump": ["Space", "KeyW"]
+  },
+  "sequence": [
+    { "action": "screenshot" },
+    { "action": "click", "target": "start button" },
+    { "wait": 1000 },
+    { "action": "screenshot" },
+    {
+      "action": "axis",
+      "direction": "horizontal",
+      "value": 1.0,
+      "duration": 1000,
+      "comment": "Move right for 1 second (continuous movement)"
+    },
+    { "wait": 500 },
+    { "action": "screenshot" },
+    { "action": "press", "key": "Jump", "repeat": 2, "delay": 300 },
+    { "wait": 500 },
+    {
+      "action": "axis",
+      "direction": "2d",
+      "value": 1.0,
+      "duration": 800,
+      "comment": "Diagonal movement (up-right) for 0.8 seconds"
+    },
+    { "wait": 500 },
+    { "action": "screenshot" },
+    {
+      "action": "axis",
+      "direction": "horizontal",
+      "value": -1.0,
+      "duration": 1000,
+      "comment": "Move left for 1 second"
+    },
+    { "wait": 1000 },
+    { "action": "screenshot" }
+  ],
+  "timeouts": {
+    "load": 30000,
+    "action": 10000,
+    "total": 60000
+  },
+  "retries": 3,
+  "actionRetries": 2,
+  "metadata": {
+    "genre": "platformer",
+    "notes": "Platformer config showcasing axis actions for continuous movement, 2D diagonal movement, and jump actions. Tests horizontal axis, 2D axis, and action combinations."
+  }
+}
+

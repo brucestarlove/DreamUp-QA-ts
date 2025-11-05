@@ -148,10 +148,63 @@ The system automatically resolves common key aliases:
   { "action": "screenshot" }
   ```
 
+- `axis`: Simulate continuous axis input (1D or 2D)
+  
+  **Horizontal axis (move right):**
+  ```json
+  { "action": "axis", "direction": "horizontal", "value": 1.0, "duration": 1000 }
+  ```
+  
+  **Horizontal axis (move left):**
+  ```json
+  { "action": "axis", "direction": "horizontal", "value": -1.0, "duration": 1000 }
+  ```
+  
+  **Vertical axis (move up):**
+  ```json
+  { "action": "axis", "direction": "vertical", "value": 1.0, "duration": 1000 }
+  ```
+  
+  **2D diagonal movement:**
+  ```json
+  { "action": "axis", "direction": "2d", "value": 1.0, "duration": 800 }
+  ```
+  
+  **With explicit keys:**
+  ```json
+  { "action": "axis", "direction": "horizontal", "keys": ["ArrowRight"], "duration": 1000 }
+  ```
+  
+  **Options:**
+  - `direction` - Axis direction: "horizontal", "vertical", or "2d"
+  - `value` - Axis value from -1.0 to 1.0 (default: 1.0)
+    - Horizontal: 1.0 = right, -1.0 = left
+    - Vertical: 1.0 = up, -1.0 = down
+    - 2D: 1.0 = up-right diagonal, -1.0 = down-left diagonal
+  - `duration` - Duration in milliseconds (max: 10000ms)
+  - `keys` - Optional: explicit keys to use (otherwise derived from controls)
+  - `timeout` - Optional: per-action timeout override
+
 - `wait`: Wait for specified milliseconds
   ```json
   { "wait": 2000 }
   ```
+
+### Per-Action Overrides
+
+All action types support optional per-action configuration overrides:
+
+- **Timeout Override:** Override the default action timeout for specific actions
+  ```json
+  { "action": "click", "target": "start button", "timeout": 15000 }
+  ```
+
+- **Model Override (click actions):** Use a different AI model for specific actions
+  ```json
+  { "action": "click", "target": "complex menu", "model": "openai/gpt-4o" }
+  ```
+
+These overrides are useful for actions that need more time (complex UI) or better accuracy (difficult element detection).
 
 ### DOM Optimization
 
@@ -206,6 +259,12 @@ The project includes pre-built configs for common game types:
 - Tests vertical movement and key alternation
 - Demonstrates alternating key presses for realistic paddle movement
 
+### Platformer (`configs/platformer.json`)
+- Advanced platformer config with axis actions
+- Demonstrates continuous horizontal movement
+- Shows 2D diagonal movement (up-right)
+- Combines axis actions with jump mechanics
+
 ### Example (`configs/example.json`)
 - General-purpose platformer config
 - Showcases controls mapping with Jump action
@@ -213,7 +272,11 @@ The project includes pre-built configs for common game types:
 
 **Usage:**
 ```bash
+# Test Snake game
 bun run src/cli.ts test https://example.com/snake --config ./configs/snake.json
+
+# Test Platformer with axis controls
+bun run src/cli.ts test https://example.com/platformer --config ./configs/platformer.json
 ```
 
 ## Development
