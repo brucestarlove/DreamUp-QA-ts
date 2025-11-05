@@ -1,9 +1,16 @@
 {
+  "controls": {
+    "MoveRight": ["ArrowRight", "KeyD"],
+    "MoveLeft": ["ArrowLeft", "KeyA"],
+    "Jump": ["Space", "KeyW"]
+  },
   "sequence": [
     { "action": "screenshot" },
     { "action": "click", "target": "start button" },
     { "wait": 1000 },
-    { "action": "press", "key": "ArrowRight", "repeat": 5 },
+    { "action": "press", "key": "MoveRight", "repeat": 5, "delay": 100 },
+    { "wait": 500 },
+    { "action": "press", "key": "Jump", "repeat": 2, "delay": 300 },
     { "wait": 2000 },
     { "action": "screenshot" }
   ],
@@ -13,9 +20,9 @@
     "total": 60000
   },
   "retries": 3,
+  "actionRetries": 2,
   "metadata": {
     "genre": "platformer",
-    "notes": "Example config for testing"
+    "notes": "Example config showcasing controls mapping and enhanced press actions"
   }
 }
-

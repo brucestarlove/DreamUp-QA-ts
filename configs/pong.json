@@ -1,0 +1,31 @@
+{
+  "controls": {
+    "MoveUp": ["ArrowUp", "KeyW"],
+    "MoveDown": ["ArrowDown", "KeyS"]
+  },
+  "sequence": [
+    { "action": "screenshot" },
+    { "action": "click", "target": "start button" },
+    { "wait": 200 },
+    { "action": "screenshot" },
+    { "action": "press", "alternateKeys": ["MoveUp", "MoveDown"], "repeat": 10, "delay": 50 },
+    { "wait": 100 },
+    { "action": "screenshot" },
+    { "action": "press", "key": "MoveUp", "repeat": 3, "delay": 200 },
+    { "wait": 400 },
+    { "action": "press", "key": "MoveDown", "repeat": 3, "delay": 200 },
+    { "wait": 500 },
+    { "action": "screenshot" }
+  ],
+  "timeouts": {
+    "load": 10000,
+    "action": 10000,
+    "total": 30000
+  },
+  "retries": 3,
+  "actionRetries": 2,
+  "metadata": {
+    "genre": "arcade",
+    "notes": "Pong game config for Player 2 paddle (Up/Down). Tests vertical movement and key alternation."
+  }
+}

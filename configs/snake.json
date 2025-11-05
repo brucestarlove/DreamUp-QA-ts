@@ -1,0 +1,37 @@
+{
+  "controls": {
+    "MoveUp": ["ArrowUp", "KeyW"],
+    "MoveDown": ["ArrowDown", "KeyS"],
+    "MoveLeft": ["ArrowLeft", "KeyA"],
+    "MoveRight": ["ArrowRight", "KeyD"]
+  },
+  "sequence": [
+    { "action": "screenshot" },
+    { "action": "click", "target": "start button" },
+    { "wait": 1000 },
+    { "action": "screenshot" },
+    { "action": "press", "key": "MoveRight" },
+    { "wait": 1500 },
+    { "action": "screenshot" },
+    { "action": "press", "key": "MoveDown" },
+    { "wait": 1500 },
+    { "action": "screenshot" },
+    { "action": "press", "key": "MoveLeft" },
+    { "wait": 1500 },
+    { "action": "screenshot" },
+    { "action": "press", "key": "MoveUp" },
+    { "wait": 1500 },
+    { "action": "screenshot" }
+  ],
+  "timeouts": {
+    "load": 30000,
+    "action": 10000,
+    "total": 60000
+  },
+  "retries": 3,
+  "actionRetries": 2,
+  "metadata": {
+    "genre": "arcade",
+    "notes": "Snake game config with WASD and Arrow key support. Single key press changes direction; snake moves continuously. Tests all 4 directional changes with 1.5s intervals."
+  }
+}

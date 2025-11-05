@@ -14,12 +14,18 @@ const SequenceStepSchema = z.union([
     target: z.string(),
     useCUA: z.boolean().optional(), // Per-action CUA override
   }),
-  // Press action: { action: "press", key: "ArrowRight", repeat?: 5 }
+  // Press action: { action: "press", key: "ArrowRight", repeat?: 5, duration?: 500, alternateKeys?: ["Left", "Right"], delay?: 100 }
   z.object({
     action: z.literal('press'),
-    key: z.string(),
+    key: z.string().optional(), // Optional if alternateKeys is provided
     repeat: z.number().int().positive().optional(),
-  }),
+    duration: z.number().int().positive().optional(), // Key hold duration in ms (for continuous press)
+    alternateKeys: z.array(z.string()).optional(), // Keys to alternate between (e.g., ["Left", "Right"])
+    delay: z.number().int().nonnegative().optional(), // Delay between presses in ms (default: 50ms)
+  }).refine(
+    (data) => data.key || (data.alternateKeys && data.alternateKeys.length > 0),
+    { message: 'Either "key" or "alternateKeys" must be provided' }
+  ),
   // Screenshot action: { action: "screenshot" }
   z.object({
     action: z.literal('screenshot'),
@@ -50,7 +56,8 @@ const TimeoutsSchema = z.object({
   total: z.number().int().positive().default(60000), // 1 minute (as per user's change)
 });
 
-// Controls mapping (optional, for future use)
+// Controls mapping schema - maps high-level actions to keys
+// Example: { "MoveUp": ["ArrowUp", "KeyW"], "MoveDown": ["ArrowDown", "KeyS"] }
 const ControlsSchema = z.record(z.array(z.string())).optional();
 
 // DOM optimization configuration (optional)

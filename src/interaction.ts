@@ -10,6 +10,7 @@ import { logger } from './utils/logger.js';
 import { sleep, getTimestamp } from './utils/time.js';
 import { retryWithBackoff, isRetryableError } from './utils/retry.js';
 import { classifyError } from './utils/errors.js';
+import { resolveKeyName, validateControls, resolveAction } from './utils/controls.js';
 
 export interface AgentResult {
   message?: string; // Agent's completion message (e.g., "The game ended with a win for the computer")
@@ -42,6 +43,14 @@ export async function executeAction(
   const timeout = config.timeouts?.action ?? 10000;
   const actionRetries = config.actionRetries ?? 2;
 
+  // Validate controls schema if provided
+  if (config.controls) {
+    const validation = validateControls(config.controls);
+    if (!validation.valid) {
+      logger.warn('Controls validation warnings:', validation.warnings);
+    }
+  }
+
   // Validate and sanitize inputs
   if ('action' in step && step.action === 'press') {
     // Clamp repeat count to prevent runaway loops
@@ -49,11 +58,11 @@ export async function executeAction(
       logger.warn(`Clamping repeat count from ${step.repeat} to 100`);
       step.repeat = 100;
     }
-    // Validate key name
-    if (!step.key || step.key.trim().length === 0) {
+    // Validate key name or alternateKeys
+    if (!step.key && (!step.alternateKeys || step.alternateKeys.length === 0)) {
       return {
         success: false,
-        error: 'Invalid key name for press action',
+        error: 'Press action requires either "key" or "alternateKeys"',
         actionIndex,
       };
     }
@@ -120,37 +129,69 @@ export async function executeAction(
                 const observeTimeout = timeout;
                 let actions: any[] = [];
 
-                // Try observe with original instruction
-                try {
-                  actions = await stagehand.observe(`find the ${step.target}`, {
-                    timeout: observeTimeout,
-                  });
-                } catch (error) {
-                  logger.debug(`Observe failed for "${step.target}": ${error}`);
-                }
-
-                // If observe didn't find anything, try alternative phrasings
-                if (!actions || actions.length === 0) {
-                  const alternativePhrasings = [
-                    `find ${step.target}`,
-                    `locate ${step.target}`,
-                    `click ${step.target}`,
+                // Generate game-agnostic button phrasings
+                // Focus on functional descriptions rather than game-specific text
+                const generateButtonPhrasings = (target: string): string[] => {
+                  // Normalize target text
+                  const normalized = target.toLowerCase().trim();
+                  
+                  // Common game button patterns (functional descriptions)
+                  const patterns = [
+                    `find the ${target}`,
+                    `find ${target}`,
+                    `locate the ${target}`,
+                    `locate ${target}`,
+                    `click the ${target}`,
+                    `click ${target}`,
                   ];
+                  
+                  // Add common synonyms for game buttons
+                  if (normalized.includes('start') || normalized.includes('play') || normalized.includes('begin')) {
+                    patterns.push(
+                      'find the start button',
+                      'find the play button',
+                      'find the begin button',
+                      'locate start game button',
+                      'locate play game button',
+                    );
+                  }
+                  
+                  if (normalized.includes('restart') || normalized.includes('again') || normalized.includes('retry')) {
+                    patterns.push(
+                      'find the restart button',
+                      'find the play again button',
+                      'find the retry button',
+                      'locate restart game button',
+                    );
+                  }
+                  
+                  if (normalized.includes('pause') || normalized.includes('menu')) {
+                    patterns.push(
+                      'find the pause button',
+                      'find the menu button',
+                      'locate pause button',
+                    );
+                  }
+                  
+                  return [...new Set(patterns)]; // Remove duplicates
+                };
 
-                  for (const phrasing of alternativePhrasings) {
-                    try {
-                      logger.debug(`Retrying observe with alternative phrasing: "${phrasing}"`);
-                      actions = await stagehand.observe(phrasing, {
-                        timeout: observeTimeout,
-                      });
-                      if (actions && actions.length > 0) {
-                        logger.debug(`Found ${actions.length} elements with alternative phrasing`);
-                        break;
-                      }
-                    } catch (error) {
-                      logger.debug(`Alternative phrasing failed: ${error}`);
-                      continue;
+                const phrasings = generateButtonPhrasings(step.target);
+
+                // Try each phrasing until one succeeds
+                for (const phrasing of phrasings) {
+                  try {
+                    logger.debug(`Trying observe with phrasing: "${phrasing}"`);
+                    actions = await stagehand.observe(phrasing, {
+                      timeout: observeTimeout,
+                    });
+                    if (actions && actions.length > 0) {
+                      logger.debug(`Found ${actions.length} element(s) with phrasing: "${phrasing}"`);
+                      break;
                     }
+                  } catch (error) {
+                    logger.debug(`Phrasing failed: "${phrasing}"`);
+                    continue;
                   }
                 }
 
@@ -192,16 +233,77 @@ export async function executeAction(
             }
 
             case 'press': {
-              // Press key action - use Stagehand's act method for keypress
-              // Clamp repeat count (already validated above)
+              // Enhanced press key action - supports duration, alternation, and delay
               const repeat = Math.min(step.repeat ?? 1, 100);
-
-              for (let i = 0; i < repeat; i++) {
-                // Use act() with natural language for keypress - pass timeout to Stagehand
-                await stagehand.act(`press the ${step.key} key`, { timeout });
-                // Small delay between key presses
-                if (i < repeat - 1) {
-                  await sleep(50);
+              const delay = step.delay ?? 50; // Default 50ms between presses
+              const duration = step.duration; // Optional: hold key for duration
+              
+              // Resolve keys (either single key or alternating keys)
+              let keysToPress: string[];
+              
+              if (step.alternateKeys) {
+                // Alternating keys mode (e.g., ["Left", "Right"] for horizontal movement)
+                keysToPress = step.alternateKeys.map(k => {
+                  // Try to resolve as action reference first
+                  const actionKeys = resolveAction(k, config.controls);
+                  if (actionKeys && actionKeys.length > 0) {
+                    return actionKeys[0]; // Use primary key
+                  }
+                  // Otherwise resolve as key name
+                  return resolveKeyName(k);
+                });
+                
+                logger.debug(`Alternating between keys: ${keysToPress.join(', ')} (repeat: ${repeat})`);
+                
+                // Alternate between keys
+                for (let i = 0; i < repeat; i++) {
+                  const key = keysToPress[i % keysToPress.length];
+                  
+                  if (duration) {
+                    // Hold key for duration (not yet supported by Stagehand act(), fall back to normal press)
+                    logger.debug(`Pressing ${key} (hold duration not yet supported, using normal press)`);
+                    await stagehand.act(`press the ${key} key`, { timeout });
+                  } else {
+                    await stagehand.act(`press the ${key} key`, { timeout });
+                  }
+                  
+                  if (i < repeat - 1) {
+                    await sleep(delay);
+                  }
+                }
+              } else if (step.key) {
+                // Single key mode
+                // Try to resolve as action reference first (e.g., "MoveRight" -> "ArrowRight")
+                const actionKeys = resolveAction(step.key, config.controls);
+                const keyToPress = actionKeys && actionKeys.length > 0 
+                  ? actionKeys[0] 
+                  : resolveKeyName(step.key);
+                
+                logger.debug(`Pressing key: ${keyToPress} (repeat: ${repeat})`);
+                
+                if (duration) {
+                  // Hold key for duration (simulate with multiple rapid presses)
+                  logger.debug(`Simulating key hold for ${duration}ms`);
+                  const holdStartTime = Date.now();
+                  let pressCount = 0;
+                  
+                  while (Date.now() - holdStartTime < duration) {
+                    await stagehand.act(`press the ${keyToPress} key`, { timeout });
+                    pressCount++;
+                    // Small delay between presses (20ms for smoother hold simulation)
+                    await sleep(20);
+                  }
+                  
+                  logger.debug(`Key hold completed (${pressCount} presses in ${duration}ms)`);
+                } else {
+                  // Normal repeated presses
+                  for (let i = 0; i < repeat; i++) {
+                    await stagehand.act(`press the ${keyToPress} key`, { timeout });
+                    
+                    if (i < repeat - 1) {
+                      await sleep(delay);
+                    }
+                  }
                 }
               }
 
