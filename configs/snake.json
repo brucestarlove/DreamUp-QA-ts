@@ -6,7 +6,6 @@
     "MoveRight": ["ArrowRight", "KeyD"]
   },
   "sequence": [
-    { "action": "screenshot" },
     { "action": "click", "target": "start button" },
     { "wait": 1000 },
     { "action": "screenshot" },
@@ -19,9 +18,7 @@
     { "action": "press", "key": "MoveLeft" },
     { "wait": 1500 },
     { "action": "screenshot" },
-    { "action": "press", "key": "MoveUp" },
-    { "wait": 1500 },
-    { "action": "screenshot" }
+    { "action": "press", "key": "MoveUp" }
   ],
   "timeouts": {
     "load": 30000,

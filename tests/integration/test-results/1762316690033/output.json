@@ -1,0 +1,77 @@
+{
+  "url": [],
+  "config_path": {
+    "heuristicScore": 1,
+    "finalScore": 1,
+    "issues": [],
+    "gameState": {
+      "gameOver": false,
+      "victory": false,
+      "score": 0
+    },
+    "stagehandTokens": {
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0
+    },
+    "cacheHit": false
+  },
+  "timestamp": "2025-11-05T04:25:07.567Z",
+  "test_duration": 13,
+  "status": "pass",
+  "playability_score": 1,
+  "issues": [],
+  "screenshots": [
+    "baseline_2025-11-05T04-24-54.png",
+    "action_0_2025-11-05T04-24-54.png",
+    "end_2025-11-05T04-24-58.png"
+  ],
+  "screenshot_metadata": [
+    {
+      "filename": "baseline_2025-11-05T04-24-54.png",
+      "path": "/Users/bdr/Git/GAUNTLET/DreamUp-QA-ts/tests/integration/test-results/1762316690033/screenshots/baseline_2025-11-05T04-24-54.png",
+      "timestamp": "2025-11-05T04:24:54.609Z",
+      "label": "baseline",
+      "stepIndex": -1
+    },
+    {
+      "filename": "action_0_2025-11-05T04-24-54.png",
+      "path": "/Users/bdr/Git/GAUNTLET/DreamUp-QA-ts/tests/integration/test-results/1762316690033/screenshots/action_0_2025-11-05T04-24-54.png",
+      "timestamp": "2025-11-05T04:24:54.776Z",
+      "label": "action_0",
+      "stepIndex": 0
+    },
+    {
+      "filename": "end_2025-11-05T04-24-58.png",
+      "path": "/Users/bdr/Git/GAUNTLET/DreamUp-QA-ts/tests/integration/test-results/1762316690033/screenshots/end_2025-11-05T04-24-58.png",
+      "timestamp": "2025-11-05T04:24:58.502Z",
+      "label": "end",
+      "stepIndex": 3
+    }
+  ],
+  "action_timings": [
+    {
+      "actionIndex": 0,
+      "executionTime": 166,
+      "timestamp": "2025-11-05T04:24:54.776Z",
+      "success": true
+    },
+    {
+      "actionIndex": 1,
+      "executionTime": 2485,
+      "timestamp": "2025-11-05T04:24:57.261Z",
+      "success": true
+    },
+    {
+      "actionIndex": 2,
+      "executionTime": 1051,
+      "timestamp": "2025-11-05T04:24:58.312Z",
+      "success": true
+    }
+  ],
+  "action_methods": {
+    "cua": 0,
+    "dom": 1,
+    "none": 2
+  }
+}

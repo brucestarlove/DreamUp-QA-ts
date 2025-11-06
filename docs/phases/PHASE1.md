@@ -2,14 +2,14 @@
 **Goal:** End-to-end working pipeline from CLI to JSON output
 
 ### 1.1 Project Setup & Structure
-- [ ] Initialize Bun/TypeScript project with `package.json`, `tsconfig.json`
-- [ ] Install core dependencies:
+- [x] Initialize Bun/TypeScript project with `package.json`, `tsconfig.json`
+- [x] Install core dependencies:
   - `@browserbasehq/stagehand` (browser automation)
   - `commander` (CLI parsing)
   - `zod` (config validation)
   - `fs-extra` (file I/O)
   - `chalk`, `ora` (CLI UX)
-- [ ] Create project directory structure:
+- [x] Create project directory structure:
   ```
   src/
     ├─ cli.ts
@@ -25,14 +25,14 @@
   ```
 
 ### 1.2 CLI Entry Point
-- [ ] Implement `cli.ts` with `commander`:
+- [x] Implement `cli.ts` with `commander`:
   - Command: `qa-agent test <game-url> [--config <file>]`
   - Options: `--config`, `--headed`, `--retries`, `--output-dir`, `--llm`, `--model`
-- [ ] Parse and validate command-line arguments
-- [ ] Create main entry point that orchestrates test execution
+- [x] Parse and validate command-line arguments
+- [x] Create main entry point that orchestrates test execution
 
 ### 1.3 Configuration Parser
-- [ ] Define Zod schema for config validation:
+- [x] Define Zod schema for config validation:
   - `sequence`: Array of step objects (each with `action`, `target`, `key`, `wait`, etc.)
   - Action types: `click`, `press`, `screenshot`, `wait`
   - Support `action: "click"` with `target: "start button"` (natural language)
@@ -43,10 +43,10 @@
   - Optional: `timeouts` (load, action, total with defaults)
   - Optional: `retries` (default: 3)
   - Optional: `metadata` (game genre/notes)
-- [ ] Implement `config.ts` with validation and normalization
-- [ ] Load and parse config file with error handling
-- [ ] Provide default config if none provided
-- [ ] Example config structure:
+- [x] Implement `config.ts` with validation and normalization
+- [x] Load and parse config file with error handling
+- [x] Provide default config if none provided
+- [x] Example config structure:
   ```json
   {
     "sequence": [
@@ -59,7 +59,7 @@
   ```
 
 ### 1.4 Session Manager
-- [ ] Implement `session.ts` (or `browser.ts`):
+- [x] Implement `session.ts` (or `browser.ts`):
   - Initialize Stagehand with `env: "BROWSERBASE"`
   - Set `cacheDir: "cache/qa-workflow-v1"` for deterministic caching
   - Create browser session (headless by default)
@@ -67,29 +67,29 @@
   - Basic page load detection
   - Record baseline screenshot after load
   - Cleanup/teardown logic
-- [ ] Handle BrowserBase session initialization
-- [ ] Basic error handling for browser launch failures
-- [ ] Capture console logs and network errors during initialization
+- [x] Handle BrowserBase session initialization
+- [x] Basic error handling for browser launch failures
+- [x] Capture console logs and network errors during initialization
 
 ### 1.5 Interaction Engine (Basic)
-- [ ] Implement `interaction.ts`:
+- [x] Implement `interaction.ts`:
   - Execute `wait` actions (pause for duration)
   - Execute `click` actions using Stagehand `act()` API
   - Execute `keypress` actions (single key events)
   - Execute `screenshot` actions (trigger capture)
-- [ ] Map config actions to Stagehand API calls
-- [ ] Basic action execution loop
+- [x] Map config actions to Stagehand API calls
+- [x] Basic action execution loop
 
 ### 1.6 Capture Manager (Basic)
-- [ ] Implement `capture.ts`:
+- [x] Implement `capture.ts`:
   - Take screenshots using Stagehand's screenshot API
   - Save screenshots to session directory
   - Basic console log collection (if available)
-- [ ] Create timestamped session directory structure
-- [ ] Save screenshots with labels and timestamps
+- [x] Create timestamped session directory structure
+- [x] Save screenshots with labels and timestamps
 
 ### 1.7 Reporter (Basic)
-- [ ] Implement `reporter.ts`:
+- [x] Implement `reporter.ts`:
   - Generate basic JSON output schema:
     - `status`: "pass" or "fail" (overall outcome)
     - `playability_score`: placeholder (0.0 for now)
@@ -97,7 +97,7 @@
     - `screenshots`: array of filenames (e.g., ["baseline.png", "end.png"])
     - `timestamp`: ISO-8601 completion timestamp
   - Write JSON to `results/<game-id>/output.json` (or `results/<session-id>/output.json`)
-- [ ] Create session directory structure
+- [x] Create session directory structure
 
 ### 1.8 Integration Test
 - [x] Test end-to-end flow with simple game URL

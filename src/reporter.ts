@@ -18,6 +18,10 @@ export interface ActionTiming {
   executionTime: number;
   timestamp: string;
   success: boolean;
+  action?: string;  // Action type: 'click', 'press', 'agent', etc.
+  target?: string;  // Click target
+  key?: string;     // Key name for press actions
+  description?: string;  // Human-readable description of the action
 }
 
 export interface LLMUsageMetrics {
@@ -51,9 +55,10 @@ export interface AgentResult {
 }
 
 export interface TestResult {
+  url: string; // Game URL being tested (most important!)
+  config_path?: string; // Path to the config file used
   timestamp: string;
   test_duration?: number;
-  config_path?: string; // Path to the config file used
   status: 'pass' | 'fail';
   playability_score: number;
   evaluation?: {
@@ -87,6 +92,7 @@ export function generateResult(
   actionResults: ActionResult[],
   captureResult: CaptureResult,
   startTime: number,
+  gameUrl: string,
   additionalIssues: Issue[] = [],
   cuaUsage?: CUAUsageMetrics,
   configPath?: string,
@@ -118,7 +124,7 @@ export function generateResult(
   const duration = endTime - startTime;
 
   // Collect issues from failed actions and additional issues
-  const issues: Issue[] = [...additionalIssues];
+  const issues: Issue[] = [...(additionalIssues ?? [])];
   
   // Convert failed actions to structured issues
   const failedActions = actionResults.filter((r) => !r.success);
@@ -157,6 +163,10 @@ export function generateResult(
       executionTime: r.executionTime!,
       timestamp: r.timestamp!,
       success: r.success,
+      action: r.action,
+      target: r.target,
+      key: r.key,
+      description: r.description,
     }));
 
   // Calculate action method breakdown (CUA vs DOM)
@@ -172,10 +182,13 @@ export function generateResult(
     .map((r) => r.agentResult!);
 
   // Add capture issues to the issues list
-  issues.push(...captureResult.issues);
+  if (captureResult.issues && captureResult.issues.length > 0) {
+    issues.push(...captureResult.issues);
+  }
 
   // Build result object with proper field ordering
   const result: TestResult = {
+    url: gameUrl, // Game URL is the most important field!
     timestamp: getTimestamp(),
     test_duration: Math.round(duration / 1000), // seconds
     status,
@@ -187,7 +200,7 @@ export function generateResult(
     action_methods,
   };
 
-  // Add config path if provided (after timestamp/test_duration, before status)
+  // Add config path if provided (right after URL, before timestamp)
   if (configPath) {
     result.config_path = configPath;
   }
@@ -286,14 +299,41 @@ export function generateResult(
     result.cost_estimate = llmUsage;
   }
 
-  // Reorder fields to match user's requirements: timestamp, test_duration, config_path, then status
-  const { timestamp, test_duration, config_path, ...rest } = result;
+  // Reorder fields to match user's requirements: url, config_path, timestamp, test_duration, then status
+  const { url, config_path, timestamp, test_duration, ...rest } = result;
   return {
+    url,
+    ...(config_path ? { config_path } : {}),
     timestamp,
     test_duration,
-    ...(config_path ? { config_path } : {}),
     ...rest,
   };
+}
+
+/**
+ * Write a placeholder result at the start of the test
+ * This allows the dashboard to show the session immediately
+ */
+export function writeInitialResult(gameUrl: string, sessionDir: string, configPath?: string): string {
+  try {
+    const outputPath = join(sessionDir, 'output.json');
+    const initialResult = {
+      url: gameUrl,
+      ...(configPath ? { config_path: configPath } : {}),
+      timestamp: getTimestamp(),
+      status: 'pass', // Placeholder
+      playability_score: 0, // Placeholder
+      issues: [],
+      screenshots: [],
+    };
+    const jsonContent = JSON.stringify(initialResult, null, 2);
+    writeFileSync(outputPath, jsonContent, 'utf-8');
+    logger.info(`Initial result written to: ${outputPath}`);
+    return outputPath;
+  } catch (error) {
+    logger.error('Failed to write initial result:', error);
+    throw error;
+  }
 }
 
 /**

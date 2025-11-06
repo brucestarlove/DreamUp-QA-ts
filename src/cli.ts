@@ -12,7 +12,7 @@ import { SessionManager } from './session.js';
 import { executeSequence } from './interaction.js';
 import { CaptureManager } from './capture.js';
 import { CUAManager } from './cua.js';
-import { generateResult, writeResult, type TestResult } from './reporter.js';
+import { generateResult, writeResult, writeInitialResult, type TestResult } from './reporter.js';
 import { generateSessionId } from './utils/time.js';
 import { logger } from './utils/logger.js';
 import { evaluatePlayability } from './evaluation.js';
@@ -49,6 +49,9 @@ program
       const sessionDir = join(process.cwd(), outputDir, sessionId);
       const { mkdirSync } = await import('fs');
       mkdirSync(sessionDir, { recursive: true });
+
+      // Write initial output.json so the session appears in the dashboard immediately
+      writeInitialResult(gameUrl, sessionDir, options.config);
 
       spinner.succeed('Configuration loaded');
 
@@ -215,6 +218,7 @@ program
           actionResults,
           captureResult,
           startTime,
+          gameUrl,
           allIssues,
           cuaUsage,
           configPath,
@@ -230,6 +234,7 @@ program
         // Generate minimal report to ensure output is always created
         try {
           const minimalResult: TestResult = {
+            url: gameUrl,
             status: 'fail' as const,
             playability_score: 0.0,
             issues: [
@@ -244,6 +249,10 @@ program
             timestamp: new Date().toISOString(),
             test_duration: Math.round((Date.now() - startTime) / 1000),
           };
+          
+          if (configPath) {
+            minimalResult.config_path = configPath;
+          }
           testResult = minimalResult;
           resultPath = writeResult(minimalResult, sessionDir);
         } catch (minimalError) {
@@ -251,6 +260,7 @@ program
           const { writeFileSync } = await import('fs');
           const emergencyPath = join(sessionDir, 'output.json');
           const emergencyResult: TestResult = {
+            url: gameUrl,
             status: 'fail',
             playability_score: 0.0,
             issues: [
@@ -263,6 +273,10 @@ program
             screenshots: [],
             timestamp: new Date().toISOString(),
           };
+          
+          if (configPath) {
+            emergencyResult.config_path = configPath;
+          }
           writeFileSync(
             emergencyPath,
             JSON.stringify(emergencyResult, null, 2),
