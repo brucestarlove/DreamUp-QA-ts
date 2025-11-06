@@ -65,8 +65,8 @@ export default function TopBar({ onRunTest }: TopBarProps) {
         <div className="flex items-center gap-4">
           <div className="relative w-12 h-12">
             <Image
-              src="/starscape-star.png"
-              alt="Starscape Logo"
+              src="/alphaschool.jpg"
+              alt="Alpha School Logo"
               fill
               className="object-contain"
             />

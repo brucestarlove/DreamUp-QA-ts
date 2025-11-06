@@ -303,6 +303,32 @@ export function generateResult(
 }
 
 /**
+ * Write a placeholder result at the start of the test
+ * This allows the dashboard to show the session immediately
+ */
+export function writeInitialResult(gameUrl: string, sessionDir: string, configPath?: string): string {
+  try {
+    const outputPath = join(sessionDir, 'output.json');
+    const initialResult = {
+      url: gameUrl,
+      ...(configPath ? { config_path: configPath } : {}),
+      timestamp: getTimestamp(),
+      status: 'pass', // Placeholder
+      playability_score: 0, // Placeholder
+      issues: [],
+      screenshots: [],
+    };
+    const jsonContent = JSON.stringify(initialResult, null, 2);
+    writeFileSync(outputPath, jsonContent, 'utf-8');
+    logger.info(`Initial result written to: ${outputPath}`);
+    return outputPath;
+  } catch (error) {
+    logger.error('Failed to write initial result:', error);
+    throw error;
+  }
+}
+
+/**
  * Write result to JSON file
  */
 export function writeResult(result: TestResult, sessionDir: string): string {

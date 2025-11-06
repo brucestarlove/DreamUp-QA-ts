@@ -23,6 +23,7 @@ async function getSessionDirs(): Promise<string[]> {
 
 /**
  * Read a single session's output.json file
+ * Returns null if the file doesn't exist yet (test still running)
  */
 async function readSessionResult(sessionId: string): Promise<TestResult | null> {
   try {
@@ -30,6 +31,11 @@ async function readSessionResult(sessionId: string): Promise<TestResult | null> 
     const content = await readFile(outputPath, 'utf-8')
     return JSON.parse(content) as TestResult
   } catch (error) {
+    // Silently ignore ENOENT - test might still be running
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
+    // Log other errors
     console.error(`Error reading session ${sessionId}:`, error)
     return null
   }

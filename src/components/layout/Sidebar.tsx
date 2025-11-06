@@ -2,9 +2,8 @@
 
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { Badge } from '@/components/ui/badge'
 import type { GroupedSessions } from '@/lib/types/test-result'
-import { formatDistanceToNow } from '@/lib/utils/date'
+import SessionCard from '@/components/sessions/SessionCard'
 
 interface SidebarProps {
   grouped: GroupedSessions
@@ -51,54 +50,12 @@ export default function Sidebar({ grouped, selectedSession, onSelectSession }: S
                 <AccordionContent>
                   <div className="space-y-1 pl-2">
                     {sessions.map((session) => (
-                      <button
+                      <SessionCard
                         key={session.sessionId}
+                        session={session}
+                        isSelected={selectedSession === session.sessionId}
                         onClick={() => onSelectSession(session.sessionId)}
-                        className={`w-full text-left p-3 rounded-lg transition-all duration-200 ${
-                          selectedSession === session.sessionId
-                            ? 'bg-light-blue/20 border border-light-blue/40'
-                            : 'bg-dark-navy/50 hover:bg-dark-navy border border-transparent hover:border-light-blue/20'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <Badge
-                            variant={session.result.status === 'pass' ? 'default' : 'destructive'}
-                            className="text-xs"
-                          >
-                            {session.result.status.toUpperCase()}
-                          </Badge>
-                          <span className="text-xs text-white/60">
-                            {formatDistanceToNow(session.result.timestamp)}
-                          </span>
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-white/70">Score</span>
-                            <span className="text-sm font-semibold text-light-blue">
-                              {(session.result.playability_score * 100).toFixed(0)}%
-                            </span>
-                          </div>
-                          
-                          {session.result.test_duration && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-white/70">Duration</span>
-                              <span className="text-xs text-white/90">
-                                {session.result.test_duration}s
-                              </span>
-                            </div>
-                          )}
-                          
-                          {session.result.issues && session.result.issues.length > 0 && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-white/70">Issues</span>
-                              <span className="text-xs text-destructive">
-                                {session.result.issues.length}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </button>
+                      />
                     ))}
                   </div>
                 </AccordionContent>

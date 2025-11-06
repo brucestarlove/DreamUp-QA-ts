@@ -12,7 +12,7 @@ import { SessionManager } from './session.js';
 import { executeSequence } from './interaction.js';
 import { CaptureManager } from './capture.js';
 import { CUAManager } from './cua.js';
-import { generateResult, writeResult, type TestResult } from './reporter.js';
+import { generateResult, writeResult, writeInitialResult, type TestResult } from './reporter.js';
 import { generateSessionId } from './utils/time.js';
 import { logger } from './utils/logger.js';
 import { evaluatePlayability } from './evaluation.js';
@@ -49,6 +49,9 @@ program
       const sessionDir = join(process.cwd(), outputDir, sessionId);
       const { mkdirSync } = await import('fs');
       mkdirSync(sessionDir, { recursive: true });
+
+      // Write initial output.json so the session appears in the dashboard immediately
+      writeInitialResult(gameUrl, sessionDir, options.config);
 
       spinner.succeed('Configuration loaded');
 
