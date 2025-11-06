@@ -12,6 +12,7 @@ import { SessionManager } from './session.js';
 import { executeSequence } from './interaction.js';
 import { CaptureManager } from './capture.js';
 import { CUAManager } from './cua.js';
+import { IncrementalWriter } from './incremental-writer.js';
 import { generateResult, writeResult, writeInitialResult, type TestResult } from './reporter.js';
 import { generateSessionId } from './utils/time.js';
 import { logger } from './utils/logger.js';
@@ -52,6 +53,9 @@ program
 
       // Write initial output.json so the session appears in the dashboard immediately
       writeInitialResult(gameUrl, sessionDir, options.config);
+
+      // Initialize incremental writer for real-time dashboard updates
+      const incrementalWriter = new IncrementalWriter(sessionDir);
 
       spinner.succeed('Configuration loaded');
 
@@ -119,6 +123,7 @@ program
           }
         },
         cuaManager,
+        incrementalWriter,
       );
 
       const successfulActions = actionResults.filter((r) => r.success).length;
@@ -203,6 +208,7 @@ program
           {
             enableLLM: options.llm || false,
             model: options.model || 'gpt-4o-mini',
+            incrementalWriter,
           },
         );
         

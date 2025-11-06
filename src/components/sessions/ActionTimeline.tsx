@@ -1,13 +1,27 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Clock, CheckCircle2, XCircle, Camera, Activity } from 'lucide-react'
+import { Clock, CheckCircle2, XCircle, Camera, Activity, Brain, Calculator, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { TestResult, ActionTiming, ScreenshotMetadata } from '@/lib/types/test-result'
 
 interface ActionTimelineProps {
   result: TestResult
 }
+
+// Evaluation step interface (from incremental writer)
+interface EvaluationStep {
+  type: 'heuristic' | 'llm'
+  status: 'in_progress' | 'completed' | 'failed'
+  score?: number
+  executionTime?: number
+  timestamp?: string
+}
+
+// Combined timeline item (action or evaluation)
+type TimelineItem = 
+  | ({ itemType: 'action' } & ActionTiming & { screenshot?: ScreenshotMetadata; method: string | null })
+  | ({ itemType: 'evaluation' } & EvaluationStep)
 
 // Helper to format execution time
 function formatExecutionTime(ms: number): string {
@@ -71,23 +85,34 @@ export default function ActionTimeline({ result }: ActionTimelineProps) {
     }
   }, [result.action_timings])
 
-  // Merge action timings with screenshot metadata
-  const timelineItems = useMemo(() => {
+  // Merge action timings with screenshot metadata and add evaluation steps
+  const timelineItems = useMemo((): TimelineItem[] => {
     const timings = result.action_timings || []
     const screenshots = result.screenshot_metadata || []
+    const evaluationProgress = (result as any).evaluation_progress as EvaluationStep[] | undefined
     
-    return timings.map(timing => {
+    // Create action items
+    const actionItems: TimelineItem[] = timings.map(timing => {
       const relatedScreenshot = screenshots.find(
         s => s.stepIndex === timing.actionIndex
       )
       
       return {
+        itemType: 'action' as const,
         ...timing,
         screenshot: relatedScreenshot,
         method: getActionMethod(timing.actionIndex, result)
       }
     })
-  }, [result.action_timings, result.screenshot_metadata])
+    
+    // Add evaluation items at the end
+    const evaluationItems: TimelineItem[] = (evaluationProgress || []).map(evalStep => ({
+      itemType: 'evaluation' as const,
+      ...evalStep
+    }))
+    
+    return [...actionItems, ...evaluationItems]
+  }, [result.action_timings, result.screenshot_metadata, (result as any).evaluation_progress])
 
   if (!result.action_timings || result.action_timings.length === 0) {
     return (
@@ -169,29 +194,32 @@ export default function ActionTimeline({ result }: ActionTimelineProps) {
         
         {/* Timeline items */}
         <div className="space-y-6">
-          {timelineItems.map((item, index) => (
-            <div key={item.actionIndex} className="relative flex gap-6">
-              {/* Timeline node */}
-              <div className="relative z-10 flex-shrink-0">
-                <div className={`
-                  w-16 h-16 rounded-full flex items-center justify-center
-                  ${item.success 
-                    ? 'bg-gradient-green-emerald shadow-lg shadow-green-500/20' 
-                    : 'bg-gradient-to-br from-red-500 to-orange-500 shadow-lg shadow-red-500/20'
-                  }
-                `}>
-                  {item.success ? (
-                    <CheckCircle2 className="w-8 h-8 text-white" />
-                  ) : (
-                    <XCircle className="w-8 h-8 text-white" />
-                  )}
-                </div>
-                
-                {/* Action number badge */}
-                <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-light-blue text-dark-navy font-bold text-xs flex items-center justify-center">
-                  {item.actionIndex}
-                </div>
-              </div>
+          {timelineItems.map((item, index) => {
+            // Render action items
+            if (item.itemType === 'action') {
+              return (
+                <div key={`action-${item.actionIndex}`} className="relative flex gap-6">
+                  {/* Timeline node */}
+                  <div className="relative z-10 flex-shrink-0">
+                    <div className={`
+                      w-16 h-16 rounded-full flex items-center justify-center
+                      ${item.success 
+                        ? 'bg-gradient-green-emerald shadow-lg shadow-green-500/20' 
+                        : 'bg-gradient-to-br from-red-500 to-orange-500 shadow-lg shadow-red-500/20'
+                      }
+                    `}>
+                      {item.success ? (
+                        <CheckCircle2 className="w-8 h-8 text-white" />
+                      ) : (
+                        <XCircle className="w-8 h-8 text-white" />
+                      )}
+                    </div>
+                    
+                    {/* Action number badge */}
+                    <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-light-blue text-dark-navy font-bold text-xs flex items-center justify-center">
+                      {item.actionIndex}
+                    </div>
+                  </div>
 
               {/* Timeline content */}
               <div className="flex-1 pb-4">
@@ -282,7 +310,102 @@ export default function ActionTimeline({ result }: ActionTimelineProps) {
                 </div>
               </div>
             </div>
-          ))}
+              )
+            }
+            
+            // Render evaluation items
+            if (item.itemType === 'evaluation') {
+              return (
+                <div key={`eval-${item.type}`} className="relative flex gap-6">
+                  {/* Timeline node */}
+                  <div className="relative z-10 flex-shrink-0">
+                    <div className={`
+                      w-16 h-16 rounded-full flex items-center justify-center
+                      ${item.status === 'completed'
+                        ? 'bg-gradient-blue-cyan shadow-lg shadow-blue-500/20'
+                        : item.status === 'failed'
+                        ? 'bg-gradient-to-br from-red-500 to-orange-500 shadow-lg shadow-red-500/20'
+                        : 'bg-gradient-deepspace border-2 border-light-blue/40'
+                      }
+                    `}>
+                      {item.status === 'in_progress' ? (
+                        <Loader2 className="w-8 h-8 text-white animate-spin" />
+                      ) : item.status === 'completed' ? (
+                        item.type === 'heuristic' ? (
+                          <Calculator className="w-8 h-8 text-white" />
+                        ) : (
+                          <Brain className="w-8 h-8 text-white" />
+                        )
+                      ) : (
+                        <XCircle className="w-8 h-8 text-white" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Timeline content */}
+                  <div className="flex-1 pb-4">
+                    <div className="bg-mid-navy rounded-lg p-4 border border-light-blue/20 hover:border-light-blue/40 transition-colors">
+                      {/* Header */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="text-white font-semibold text-lg">
+                              {item.type === 'heuristic' ? 'Heuristic Evaluation' : 'LLM Evaluation'}
+                            </h4>
+                            {item.status === 'in_progress' && (
+                              <span className="text-white/70 text-sm font-normal animate-pulse">
+                                — Evaluating...
+                              </span>
+                            )}
+                          </div>
+                          {item.timestamp && (
+                            <div className="flex items-center gap-2 text-sm text-white/60">
+                              <Clock className="w-4 h-4" />
+                              <span>
+                                {new Date(item.timestamp).toLocaleTimeString()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={item.status === 'completed' ? 'default' : item.status === 'failed' ? 'destructive' : 'secondary'}
+                            className="text-xs"
+                          >
+                            {item.status === 'in_progress' ? 'Running' : item.status === 'completed' ? 'Complete' : 'Failed'}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* Metrics */}
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        {item.score !== undefined && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-white/60">Score:</span>
+                            <span className="font-mono font-semibold text-white">
+                              {(item.score * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                        )}
+                        {item.executionTime !== undefined && (
+                          <div className="flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-light-blue" />
+                            <span className="text-white/60">Execution:</span>
+                            <span className="font-mono font-semibold text-white">
+                              {formatExecutionTime(item.executionTime)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            }
+            
+            return null
+          })}
         </div>
       </div>
 

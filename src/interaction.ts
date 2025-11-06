@@ -6,6 +6,7 @@ import type { Stagehand } from '@browserbasehq/stagehand';
 import type { SequenceStep, Config } from './config.js';
 import type { CaptureManager } from './capture.js';
 import type { CUAManager } from './cua.js';
+import type { IncrementalWriter } from './incremental-writer.js';
 import { logger } from './utils/logger.js';
 import { sleep, getTimestamp } from './utils/time.js';
 import { retryWithBackoff, isRetryableError } from './utils/retry.js';
@@ -685,6 +686,7 @@ export async function executeSequence(
   captureManager?: CaptureManager,
   onActionComplete?: (result: ActionResult) => void,
   cuaManager?: CUAManager,
+  incrementalWriter?: IncrementalWriter,
 ): Promise<ActionResult[]> {
   const results: ActionResult[] = [];
   const maxSteps = 100; // As per user's change
@@ -731,6 +733,26 @@ export async function executeSequence(
       } catch (error) {
         logger.error('Failed to capture error screenshot:', error);
       }
+    }
+
+    // Update real-time dashboard with action result
+    if (incrementalWriter && result.timestamp && result.executionTime !== undefined) {
+      incrementalWriter.addAction({
+        actionIndex: result.actionIndex,
+        executionTime: result.executionTime,
+        timestamp: result.timestamp,
+        success: result.success,
+        action: result.action,
+        target: result.target,
+        key: result.key,
+        description: result.description,
+      });
+
+      // Update action methods breakdown in real-time
+      const cuaCount = results.filter(r => r.methodUsed === 'cua').length;
+      const domCount = results.filter(r => r.methodUsed === 'dom').length;
+      const noneCount = results.filter(r => !r.methodUsed || r.methodUsed === 'none').length;
+      incrementalWriter.updateActionMethods(cuaCount, domCount, noneCount);
     }
 
     if (onActionComplete) {
