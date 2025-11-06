@@ -13,7 +13,7 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           "bg-white/10 border-2 border-white/10",
           "text-white placeholder:text-white/50",
           "transition-all duration-200",
-          "focus-visible:bg-white focus-visible:text-dark-navy",
+          "focus-visible:bg-white focus-visible:text-[oklch(0.7432_0.0912_217.81)]",
           "focus-visible:border-deep-blue focus-visible:shadow-subtle",
           "focus-visible:outline-none",
           "disabled:cursor-not-allowed disabled:opacity-50",

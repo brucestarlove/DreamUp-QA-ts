@@ -12,9 +12,10 @@ import ConfigSelector from '@/components/test/ConfigSelector'
 
 interface TopBarProps {
   onRunTest: (config: any) => void
+  onTestStarted?: (gameUrl: string) => void
 }
 
-export default function TopBar({ onRunTest }: TopBarProps) {
+export default function TopBar({ onRunTest, onTestStarted }: TopBarProps) {
   const [gameUrl, setGameUrl] = useState('')
   const [selectedConfig, setSelectedConfig] = useState('')
   const [enableLLM, setEnableLLM] = useState(false)
@@ -23,6 +24,7 @@ export default function TopBar({ onRunTest }: TopBarProps) {
   const [retries, setRetries] = useState('3')
   const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isRunning, setIsRunning] = useState(false)
 
   const handleRunTest = async () => {
     if (!gameUrl) {
@@ -39,6 +41,9 @@ export default function TopBar({ onRunTest }: TopBarProps) {
       retries: parseInt(retries),
     }
 
+    setIsRunning(true)
+    setError(null)
+
     try {
       const response = await fetch('/api/test/run', {
         method: 'POST',
@@ -46,21 +51,36 @@ export default function TopBar({ onRunTest }: TopBarProps) {
         body: JSON.stringify(testConfig),
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
-        const data = await response.json()
-        setError(data.message || 'Test execution not yet implemented')
+        setError(data.message || data.error || 'Failed to start test')
+        setIsRunning(false)
+        console.error('Test start failed:', data)
       } else {
+        // Success! Log the details and hide the form
+        console.log('✅ Test started successfully')
+        console.log('  Command:', data.command)
+        console.log('  PID:', data.pid)
+        console.log('  Log file:', data.logFile)
+        
+        setShowForm(false)
         onRunTest(testConfig)
+        onTestStarted?.(gameUrl)
         setError(null)
+        setIsRunning(false)
       }
     } catch (err) {
-      setError('Failed to start test')
+      const errorMsg = err instanceof Error ? err.message : 'Failed to start test'
+      setError(errorMsg)
+      setIsRunning(false)
+      console.error('Test start exception:', err)
     }
   }
 
   return (
-    <div className="h-[180px] bg-gradient-deepspace border-b border-light-blue/20 shadow-elevated">
-      <div className="h-full px-6 py-4 flex items-center justify-between">
+    <div className="relative bg-gradient-deepspace border-b border-light-blue/20 shadow-elevated">
+      <div className="h-[180px] px-6 py-4 flex items-center justify-between">
         {/* Logo Section */}
         <div className="flex items-center gap-4">
           <div className="relative w-12 h-12">
@@ -104,7 +124,7 @@ export default function TopBar({ onRunTest }: TopBarProps) {
 
       {/* Expandable Form */}
       {showForm && (
-        <div className="px-6 pb-4 border-t border-light-blue/10 pt-4 bg-dark-navy/30">
+        <div className="absolute top-full left-0 right-0 z-50 px-6 pb-6 pt-4 bg-mid-navy border-t border-light-blue/20 shadow-2xl backdrop-blur-sm rounded-b-lg">
           <div className="grid grid-cols-4 gap-4 items-end">
             <div className="col-span-2">
               <label className="text-sm text-white/80 mb-2 block">Game URL</label>
@@ -160,9 +180,9 @@ export default function TopBar({ onRunTest }: TopBarProps) {
               />
             </div>
 
-            <Button onClick={handleRunTest} className="gap-2">
+            <Button onClick={handleRunTest} className="gap-2" disabled={isRunning}>
               <Play className="w-4 h-4" />
-              Run Test
+              {isRunning ? 'Starting...' : 'Run Test'}
             </Button>
           </div>
 

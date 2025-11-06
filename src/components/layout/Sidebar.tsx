@@ -9,10 +9,17 @@ interface SidebarProps {
   grouped: GroupedSessions
   selectedSession: string | null
   onSelectSession: (sessionId: string) => void
+  expandedGameUrl?: string | null
 }
 
-export default function Sidebar({ grouped, selectedSession, onSelectSession }: SidebarProps) {
+export default function Sidebar({ grouped, selectedSession, onSelectSession, expandedGameUrl }: SidebarProps) {
   const gameUrls = Object.keys(grouped).sort()
+  
+  // Determine which accordions should be open
+  // If expandedGameUrl is provided, open that one; otherwise open all by default
+  const defaultValues = expandedGameUrl 
+    ? [expandedGameUrl] 
+    : gameUrls // Open all by default, or [] to close all
 
   if (gameUrls.length === 0) {
     return (
@@ -34,7 +41,7 @@ export default function Sidebar({ grouped, selectedSession, onSelectSession }: S
       </div>
 
       <ScrollArea className="flex-1">
-        <Accordion type="multiple" className="px-2">
+        <Accordion type="multiple" className="px-2" defaultValue={defaultValues}>
           {gameUrls.map((gameUrl) => {
             const sessions = grouped[gameUrl]
             const gameName = new URL(gameUrl).hostname + new URL(gameUrl).pathname

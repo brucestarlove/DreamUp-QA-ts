@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import TopBar from './TopBar'
 import Sidebar from './Sidebar'
 import SessionDetail from '@/components/sessions/SessionDetail'
@@ -25,18 +25,43 @@ export default function DashboardLayout({
   error,
   onRefresh,
 }: DashboardLayoutProps) {
+  const [expandedGameUrl, setExpandedGameUrl] = useState<string | null>(null)
+
   const handleRunTest = (config: any) => {
     console.log('Running test with config:', config)
-    // This will be implemented later with real test execution
   }
+
+  const handleTestStarted = (gameUrl: string) => {
+    // Expand the accordion for this game URL
+    setExpandedGameUrl(gameUrl)
+    
+    // Trigger a refresh to get the new session
+    onRefresh()
+  }
+
+  // When sessions update after a test starts, auto-select the newest running session for the expanded game
+  useEffect(() => {
+    if (expandedGameUrl && sessions?.grouped[expandedGameUrl]) {
+      const gameSessions = sessions.grouped[expandedGameUrl]
+      if (gameSessions.length > 0) {
+        // Find the newest running session (one without test_duration, meaning it's still running)
+        const runningSession = gameSessions.find(s => !s.result?.test_duration)
+        const newestSession = runningSession || gameSessions[0]
+        
+        if (newestSession && newestSession.sessionId !== selectedSession) {
+          onSelectSession(newestSession.sessionId)
+        }
+      }
+    }
+  }, [sessions, expandedGameUrl, selectedSession, onSelectSession])
 
   const currentSession = sessions?.sessions.find(s => s.sessionId === selectedSession)
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      <TopBar onRunTest={handleRunTest} />
+    <div className="h-screen flex flex-col bg-background relative">
+      <TopBar onRunTest={handleRunTest} onTestStarted={handleTestStarted} />
       
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative z-10">
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
@@ -56,6 +81,7 @@ export default function DashboardLayout({
               grouped={sessions.grouped}
               selectedSession={selectedSession}
               onSelectSession={onSelectSession}
+              expandedGameUrl={expandedGameUrl}
             />
             
             <div className="flex-1 overflow-auto">

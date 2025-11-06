@@ -31,25 +31,25 @@
   }
   
   .bg-light-blue {
-    background-color: oklch(var(--starscape-light-blue));
+    background-color: oklch(0.7432 0.0912 217.81);
   }
   
   /* Text color utilities */
   .text-light-blue {
-    color: oklch(var(--starscape-light-blue));
+    color: oklch(0.7432 0.0912 217.81);
   }
   
   /* Border utilities */
   .border-light-blue\/10 {
-    border-color: oklch(var(--starscape-light-blue) / 0.1);
+    border-color: oklch(0.7432 0.0912 217.81 / 0.1);
   }
   
   .border-light-blue\/20 {
-    border-color: oklch(var(--starscape-light-blue) / 0.2);
+    border-color: oklch(0.7432 0.0912 217.81 / 0.2);
   }
   
   .border-light-blue\/40 {
-    border-color: oklch(var(--starscape-light-blue) / 0.4);
+    border-color: oklch(0.7432 0.0912 217.81 / 0.4);
   }
   
   /* Gradient backgrounds */

@@ -4,7 +4,6 @@
     "MoveDown": ["ArrowDown", "KeyS"]
   },
   "sequence": [
-    { "action": "screenshot" },
     { "action": "click", "target": "start button" },
     { "wait": 200 },
     { "action": "press", "key": "MoveDown", "duration": 3000 },
@@ -13,9 +12,7 @@
     { "action": "screenshot" },
     { "action": "press", "key": "MoveUp", "duration": 1000 },
     { "wait": 400 },
-    { "action": "press", "alternateKeys": ["MoveUp", "MoveDown"], "repeat": 10, "delay": 50 },
-    { "wait": 500 },
-    { "action": "screenshot" }
+    { "action": "press", "alternateKeys": ["MoveUp", "MoveDown"], "repeat": 10, "delay": 50 }
   ],
   "timeouts": {
     "load": 10000,

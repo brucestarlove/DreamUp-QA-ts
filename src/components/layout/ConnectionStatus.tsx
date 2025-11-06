@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Wifi, WifiOff, RefreshCw } from 'lucide-react'
 import type { SessionEvent } from '@/hooks/useSessionWatch'
@@ -15,22 +16,45 @@ export default function ConnectionStatus({
   reconnectAttempts,
   latestEvent 
 }: ConnectionStatusProps) {
-  const getEventMessage = (event: SessionEvent | null) => {
-    if (!event || event.type === 'connected') return null
-    
-    switch (event.type) {
-      case 'session_created':
-        return `New session: ${event.sessionId?.slice(-8)}`
-      case 'session_updated':
-        return `Session updated: ${event.sessionId?.slice(-8)}`
-      case 'screenshot_added':
-        return `New screenshot: ${event.filename}`
-      default:
-        return null
-    }
-  }
+  const [displayedMessage, setDisplayedMessage] = useState<string | null>(null)
 
-  const eventMessage = getEventMessage(latestEvent)
+  // Auto-hide tooltip after 3 seconds when a new event arrives
+  useEffect(() => {
+    // Get message from latest event
+    let message: string | null = null
+    if (latestEvent && latestEvent.type !== 'connected') {
+      switch (latestEvent.type) {
+        case 'session_created':
+          message = `New session: ${latestEvent.sessionId?.slice(-8)}`
+          break
+        case 'session_updated':
+          message = `Session updated: ${latestEvent.sessionId?.slice(-8)}`
+          break
+        case 'screenshot_added':
+          message = `New screenshot: ${latestEvent.filename}`
+          break
+        default:
+          message = null
+      }
+    }
+    
+    if (message) {
+      // Show the message immediately
+      setDisplayedMessage(message)
+      
+      // Auto-hide after 3 seconds
+      const timer = setTimeout(() => {
+        setDisplayedMessage(null)
+      }, 3000)
+      
+      return () => clearTimeout(timer)
+    } else {
+      // Clear message if event is null or connected
+      setDisplayedMessage(null)
+    }
+  }, [latestEvent])
+
+  const eventMessage = displayedMessage
 
   return (
     <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 items-end">
