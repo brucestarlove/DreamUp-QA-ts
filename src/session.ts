@@ -117,7 +117,6 @@ export class SessionManager {
 
           // Verify page loaded (basic check for blank screen)
           const pageContent = await page.evaluate(() => {
-            // @ts-expect-error - document exists in browser context
             return document.body?.innerText?.length || 0;
           });
 
@@ -187,7 +186,6 @@ export class SessionManager {
               // Hide elements (preserves layout)
               args.hide.forEach((selector) => {
                 try {
-                  // @ts-expect-error - document exists in browser context
                   const elements = document.querySelectorAll(selector);
                   elements.forEach((el: Element) => {
                     // Element.style exists in browser context
@@ -201,7 +199,6 @@ export class SessionManager {
               // Remove elements completely (may affect layout)
               args.remove.forEach((selector) => {
                 try {
-                  // @ts-expect-error - document exists in browser context
                   const elements = document.querySelectorAll(selector);
                   elements.forEach((el: Element) => {
                     // Element.remove() exists in browser context
@@ -223,7 +220,6 @@ export class SessionManager {
           await page.evaluate((hide: string[]) => {
             hide.forEach((selector) => {
               try {
-                // @ts-expect-error - document exists in browser context
                 const elements = document.querySelectorAll(selector);
                 elements.forEach((el: Element) => {
                   (el as any).style.display = 'none';
@@ -301,7 +297,6 @@ export class SessionManager {
 
       // Verify page loaded
       const pageContent = await page.evaluate(() => {
-        // @ts-expect-error - document exists in browser context
         return document.body?.innerText?.length || 0;
       });
 

@@ -1,20 +1,167 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
-@import "@starscapedigital/tailwind-preset/src/web.css";
-@plugin "tailwindcss-animate";
-
-@custom-variant dark (&:is(.dark *));
 
 /* Base styles */
 @layer base {
   * {
-    border-color: hsl(var(--border));
+    border-color: oklch(var(--border));
   }
 
   body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
+    background-color: oklch(var(--background));
+    color: oklch(var(--foreground));
     font-feature-settings: "rlig" 1, "calt" 1;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+}
+
+/* Starscape utilities */
+@layer utilities {
+  /* Background utilities */
+  .bg-dark-navy {
+    background-color: oklch(var(--starscape-dark-navy));
+  }
+  
+  .bg-mid-navy {
+    background-color: oklch(var(--starscape-mid-navy));
+  }
+  
+  .bg-deep-blue {
+    background-color: oklch(var(--starscape-deep-blue));
+  }
+  
+  .bg-light-blue {
+    background-color: oklch(var(--starscape-light-blue));
+  }
+  
+  /* Text color utilities */
+  .text-light-blue {
+    color: oklch(var(--starscape-light-blue));
+  }
+  
+  /* Border utilities */
+  .border-light-blue\/10 {
+    border-color: oklch(var(--starscape-light-blue) / 0.1);
+  }
+  
+  .border-light-blue\/20 {
+    border-color: oklch(var(--starscape-light-blue) / 0.2);
+  }
+  
+  .border-light-blue\/40 {
+    border-color: oklch(var(--starscape-light-blue) / 0.4);
+  }
+  
+  /* Gradient backgrounds */
+  .bg-gradient-deepspace {
+    background: var(--gradient-deepspace);
+  }
+  
+  .bg-gradient-deepspace-hover {
+    background: var(--gradient-deepspace-hover);
+  }
+  
+  .bg-gradient-cyan-purple {
+    background: var(--gradient-cyan-purple);
+  }
+  
+  .bg-gradient-purple-blue {
+    background: var(--gradient-purple-blue);
+  }
+  
+  .bg-gradient-pink-purple {
+    background: var(--gradient-pink-purple);
+  }
+  
+  .bg-gradient-cyan-vibrant {
+    background: var(--gradient-cyan-vibrant);
+  }
+  
+  .bg-gradient-green-emerald {
+    background: var(--gradient-green-emerald);
+  }
+  
+  /* Glass morphism effects */
+  .glass-white {
+    background-color: oklch(var(--starscape-glass-white));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  
+  .glass-dark {
+    background-color: oklch(var(--starscape-dark-glass));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  
+  /* Shadow utilities */
+  .shadow-subtle {
+    box-shadow: var(--shadow-subtle);
+  }
+  
+  .shadow-default {
+    box-shadow: var(--shadow-default);
+  }
+  
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+  
+  .shadow-deep {
+    box-shadow: var(--shadow-deep);
+  }
+  
+  /* Spacing utilities using design tokens */
+  .p-sm {
+    padding: var(--spacing-sm);
+  }
+  
+  .p-md {
+    padding: var(--spacing-md);
+  }
+  
+  .p-lg {
+    padding: var(--spacing-lg);
+  }
+  
+  .pb-md {
+    padding-bottom: var(--spacing-md);
+  }
+  
+  .pt-md {
+    padding-top: var(--spacing-md);
+  }
+  
+  /* Typography utilities */
+  .text-h1 {
+    font-size: var(--font-h1);
+  }
+  
+  .text-h2 {
+    font-size: var(--font-h2);
+  }
+  
+  .text-h3 {
+    font-size: var(--font-h3);
+  }
+  
+  .text-body-large {
+    font-size: var(--font-body-large);
+  }
+  
+  .text-body {
+    font-size: var(--font-body);
+  }
+  
+  .text-body-small {
+    font-size: var(--font-body-small);
+  }
+  
+  .text-caption {
+    font-size: var(--font-caption);
+  }
+  
+  .text-button {
+    font-size: var(--font-button);
   }
 }
