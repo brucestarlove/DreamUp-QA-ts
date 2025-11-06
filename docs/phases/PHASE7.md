@@ -2,10 +2,10 @@
 **Goal:** Comprehensive testing and validation against success metrics
 
 ### 7.1 Unit Tests
-- [ ] Write unit tests for config parser
-- [ ] Write unit tests for action execution logic
-- [ ] Write unit tests for evaluation scoring
-- [ ] Write unit tests for error handling
+- [x] Write unit tests for config parser
+- [x] Write unit tests for action execution logic
+- [x] Write unit tests for evaluation scoring
+- [x] Write unit tests for error handling
 
 ### 7.2 Integration Tests
 - [ ] Test full pipeline with various game URLs

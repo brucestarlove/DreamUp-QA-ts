@@ -57,6 +57,7 @@ export function isRetryableError(error: Error): boolean {
   const message = error.message.toLowerCase();
   return (
     message.includes('timeout') ||
+    message.includes('timed out') ||
     message.includes('network') ||
     message.includes('connection') ||
     message.includes('econnrefused') ||

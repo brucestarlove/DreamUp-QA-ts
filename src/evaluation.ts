@@ -293,7 +293,7 @@ export async function calculateHeuristicScore(
   let score = (successfulActions / totalActions) * (1 - Math.min(weightedIssues / totalActions, 0.5));
   
   // Apply bonuses/penalties
-  if (!loadCheck) score *= 0.5; // Heavy penalty for no load
+  if (!loadCheck) score *= 0.3; // Heavy penalty for no load or screenshots
   if (!stability) score *= 0.3; // Heavy penalty for crashes
   score *= 0.8 + (responsiveness * 0.2); // Responsiveness factor
   if (completion) score = Math.min(1.0, score + 0.1); // Bonus for completion

@@ -1,0 +1,126 @@
+/* Starscape Design Tokens - CSS Variables */
+@layer base {
+  :root {
+    /* Colors */
+    --background: 0.275 0.0228 248.7;
+    --foreground: 1 0 0;
+    --card: 0.286 0.0347 259.7;
+    --card-foreground: 1 0 0;
+    --primary: 0.788 0.0904 270;
+    --primary-foreground: 0.275 0.0228 248.7;
+    --secondary: 0.341 0.0771 260.6;
+    --secondary-foreground: 1 0 0;
+    --muted: 0.329 0.0273 259.8;
+    --muted-foreground: 0.744 0.0455 259.9;
+    --accent: 0.788 0.0904 270;
+    --accent-foreground: 0.275 0.0228 248.7;
+    --destructive: 0.705 0.1587 22;
+    --destructive-foreground: 1 0 0;
+    --border: 0.711 0.087 269.9 / 0.2;
+    --input: 0.711 0.087 269.9 / 0.1;
+    --ring: 0.788 0.0904 270;
+    
+    /* Starscape specific colors */
+    --starscape-dark-navy: 0.275 0.0228 248.7;
+    --starscape-mid-navy: 0.286 0.0347 259.7;
+    --starscape-deep-blue: 0.341 0.0771 260.6;
+    --starscape-light-blue: 0.788 0.0904 270;
+    --starscape-white: 1 0 0;
+    
+    /* Opacity variants */
+    --starscape-glass-white: 1 0 0 / 0.98;
+    --starscape-overlay-dark: 0 0 0 / 0.4;
+    --starscape-border-light: 1 0 0 / 0.1;
+    --starscape-border-blue: 0.788 0.0904 270 / 0.2;
+    --starscape-dark-glass: 0.275 0.0228 248.7 / 0.85;
+    
+    /* Gradients */
+    --gradient-deepspace: linear-gradient(in oklch 135deg, oklch(0.228 0.0384 282.9) 0%, oklch(0.254 0.0571 266.7) 50%, oklch(0.325 0.0884 255.1) 100%);
+    --gradient-deepspace-hover: linear-gradient(in oklch 135deg, oklch(0.257 0.0323 276.2) 0%, oklch(0.287 0.0577 261.5) 50%, oklch(0.356 0.0989 254.3) 100%);
+    --gradient-cyan-purple: linear-gradient(in oklch 135deg, oklch(0.715 0.1257 215.2), oklch(0.623 0.188 259.8), oklch(0.606 0.2189 292.7));
+    --gradient-purple-blue: linear-gradient(in oklch 135deg, oklch(0.558 0.2525 302.3), oklch(0.623 0.188 259.8), oklch(0.606 0.2189 292.7));
+    --gradient-pink-purple: linear-gradient(in oklch 135deg, oklch(0.656 0.2118 354.3), oklch(0.606 0.2189 292.7), oklch(0.585 0.2041 277.1));
+    --gradient-cyan-vibrant: linear-gradient(in oklch 135deg, oklch(0.767 0.151 228.9), oklch(0.905 0.1546 194.8), oklch(0.707 0.1679 242), oklch(0.832 0.1452 212.3), oklch(0.767 0.151 228.9));
+    --gradient-green-emerald: linear-gradient(in oklch 135deg, oklch(0.723 0.192 149.6), oklch(0.696 0.1491 162.5));
+    --gradient-blue-cyan: linear-gradient(in oklch 135deg, oklch(0.623 0.188 259.8), oklch(0.715 0.1257 215.2));
+    --gradient-blue-teal: linear-gradient(in oklch 135deg, oklch(0.623 0.188 259.8), oklch(0.704 0.123 182.5));
+    --gradient-purple-pink: linear-gradient(in oklch 135deg, oklch(0.627 0.2325 303.9), oklch(0.656 0.2118 354.3));
+    --gradient-violet-purple: linear-gradient(in oklch 135deg, oklch(0.606 0.2189 292.7), oklch(0.627 0.2325 303.9));
+    --gradient-pink-violet: linear-gradient(in oklch 135deg, oklch(0.656 0.2118 354.3), oklch(0.606 0.2189 292.7));
+    --gradient-cyan-teal: linear-gradient(in oklch 135deg, oklch(0.715 0.1257 215.2), oklch(0.704 0.123 182.5));
+    --gradient-teal-emerald: linear-gradient(in oklch 135deg, oklch(0.704 0.123 182.5), oklch(0.696 0.1491 162.5));
+    --gradient-emerald-cyan: linear-gradient(in oklch 135deg, oklch(0.696 0.1491 162.5), oklch(0.715 0.1257 215.2));
+    --gradient-yellow-green: linear-gradient(in oklch 135deg, oklch(0.795 0.1617 86.0), oklch(0.723 0.192 149.6));
+    --gradient-blues: linear-gradient(in oklch 135deg, oklch(0.546 0.2152 262.9), oklch(0.424 0.1809 265.6));
+    --gradient-violet-purple-light: linear-gradient(in oklch 135deg, oklch(0.709 0.1592 293.5), oklch(0.722 0.1767 305.5));
+    --gradient-blue-cyan-light: linear-gradient(in oklch 135deg, oklch(0.714 0.1434 254.6), oklch(0.797 0.1339 211.5));
+    --gradient-pink-orange: linear-gradient(in oklch 135deg, oklch(0.656 0.2118 354.3), oklch(0.705 0.1867 47.6));
+    --gradient-green-cyan-blue: linear-gradient(in oklch 135deg, oklch(0.723 0.192 149.6), oklch(0.715 0.1257 215.2), oklch(0.623 0.188 259.8));
+    --gradient-gray: linear-gradient(in oklch 135deg, oklch(0.446 0.0263 256.8), oklch(0.551 0.0234 264.4));
+    --gradient-cosmic: linear-gradient(in oklch 135deg, oklch(0.627 0.2325 303.9), oklch(0.656 0.2118 354.3), oklch(0.623 0.188 259.8), oklch(0.715 0.1257 215.2), oklch(0.704 0.123 182.5));
+    
+    /* Cosmic colors */
+    --starscape-cosmic-purple-base: 0.68 0.1841 305.9;
+    --starscape-cosmic-purple-light: 0.826 0.1085 306.2;
+    --starscape-cosmic-pink-base: 0.654 0.2133 354.1;
+    --starscape-cosmic-pink-light: 0.811 0.1014 345.5;
+    --starscape-cosmic-violet-base: 0.602 0.2214 292.2;
+    --starscape-cosmic-violet-light: 0.809 0.1022 293.1;
+    --starscape-cosmic-blue-base: 0.626 0.1859 259.6;
+    --starscape-cosmic-blue-light: 0.716 0.1425 254.5;
+    --starscape-cosmic-cyan-base: 0.723 0.126 213.3;
+    --starscape-cosmic-cyan-light: 0.794 0.1336 211.7;
+    --starscape-cosmic-teal-base: 0.702 0.1232 181.8;
+    --starscape-cosmic-teal-light: 0.832 0.1455 181.9;
+    --starscape-cosmic-yellow-base: 0.861 0.1734 92;
+    --starscape-cosmic-yellow-light: 0.922 0.1599 100.5;
+    --starscape-cosmic-emerald-base: 0.69 0.1481 162.4;
+    --starscape-cosmic-emerald-light: 0.793 0.1712 162.1;
+    --starscape-cosmic-zinc-light: 0.708 0 0;
+    --starscape-cosmic-gray-base: 0.607 0 0;
+    --starscape-cosmic-gray-light: 0.724 0 0;
+    
+    /* White text color variants - for auto-generated utilities */
+    --starscape-white-primary: 1 0 0;
+    --starscape-white-secondary: 1 0 0 / 0.8;
+    --starscape-white-tertiary: 1 0 0 / 0.6;
+    --starscape-white-disabled: 1 0 0 / 0.4;
+    
+    /* Spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --spacing-xxl: 3rem;
+    --spacing-xxxl: 4rem;
+    --spacing-xxxxl: 6rem;
+    
+    /* Typography */
+    --font-hero: 3.5rem;
+    --font-h1: 3rem;
+    --font-h2: 2.25rem;
+    --font-h3: 1.5rem;
+    --font-body-large: 1.125rem;
+    --font-body: 1rem;
+    --font-body-small: 0.875rem;
+    --font-caption: 0.75rem;
+    --font-button: 1rem;
+    
+    /* Border Radius */
+    --radius: 0.75rem;
+    --radius-xs: 0.25rem;
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-xxl: 1.5rem;
+    --radius-full: 9999px;
+    
+    /* Shadows */
+    --shadow-subtle: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.1);
+    --shadow-default: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.15);
+    --shadow-elevated: 0 0.5rem 1.5625rem rgba(15, 52, 96, 0.3);
+    --shadow-deep: 0 1.25rem 3.75rem rgba(0, 0, 0, 0.4), 0 0 0.0625rem rgba(255, 255, 255, 0.2) inset;
+  }
+}

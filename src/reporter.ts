@@ -51,9 +51,10 @@ export interface AgentResult {
 }
 
 export interface TestResult {
+  url: string; // Game URL being tested (most important!)
+  config_path?: string; // Path to the config file used
   timestamp: string;
   test_duration?: number;
-  config_path?: string; // Path to the config file used
   status: 'pass' | 'fail';
   playability_score: number;
   evaluation?: {
@@ -87,6 +88,7 @@ export function generateResult(
   actionResults: ActionResult[],
   captureResult: CaptureResult,
   startTime: number,
+  gameUrl: string,
   additionalIssues: Issue[] = [],
   cuaUsage?: CUAUsageMetrics,
   configPath?: string,
@@ -118,7 +120,7 @@ export function generateResult(
   const duration = endTime - startTime;
 
   // Collect issues from failed actions and additional issues
-  const issues: Issue[] = [...additionalIssues];
+  const issues: Issue[] = [...(additionalIssues ?? [])];
   
   // Convert failed actions to structured issues
   const failedActions = actionResults.filter((r) => !r.success);
@@ -172,10 +174,13 @@ export function generateResult(
     .map((r) => r.agentResult!);
 
   // Add capture issues to the issues list
-  issues.push(...captureResult.issues);
+  if (captureResult.issues && captureResult.issues.length > 0) {
+    issues.push(...captureResult.issues);
+  }
 
   // Build result object with proper field ordering
   const result: TestResult = {
+    url: gameUrl, // Game URL is the most important field!
     timestamp: getTimestamp(),
     test_duration: Math.round(duration / 1000), // seconds
     status,
@@ -187,7 +192,7 @@ export function generateResult(
     action_methods,
   };
 
-  // Add config path if provided (after timestamp/test_duration, before status)
+  // Add config path if provided (right after URL, before timestamp)
   if (configPath) {
     result.config_path = configPath;
   }
@@ -286,12 +291,13 @@ export function generateResult(
     result.cost_estimate = llmUsage;
   }
 
-  // Reorder fields to match user's requirements: timestamp, test_duration, config_path, then status
-  const { timestamp, test_duration, config_path, ...rest } = result;
+  // Reorder fields to match user's requirements: url, config_path, timestamp, test_duration, then status
+  const { url, config_path, timestamp, test_duration, ...rest } = result;
   return {
+    url,
+    ...(config_path ? { config_path } : {}),
     timestamp,
     test_duration,
-    ...(config_path ? { config_path } : {}),
     ...rest,
   };
 }
