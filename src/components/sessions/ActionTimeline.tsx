@@ -198,10 +198,17 @@ export default function ActionTimeline({ result }: ActionTimelineProps) {
                 <div className="bg-mid-navy rounded-lg p-4 border border-light-blue/20 hover:border-light-blue/40 transition-colors">
                   {/* Header */}
                   <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4 className="text-white font-semibold text-lg mb-1">
-                        Action {item.actionIndex}
-                      </h4>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="text-white font-semibold text-lg">
+                          Action {item.actionIndex}
+                        </h4>
+                        {item.description && (
+                          <span className="text-white/70 text-sm font-normal">
+                            — {item.description}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 text-sm text-white/60">
                         <Clock className="w-4 h-4" />
                         <span>

@@ -7,6 +7,10 @@ export interface ActionTiming {
   executionTime: number
   timestamp: string
   success: boolean
+  action?: string  // Action type: 'click', 'press', 'agent', etc.
+  target?: string  // Click target
+  key?: string     // Key name for press actions
+  description?: string  // Human-readable description of the action
 }
 
 export interface LLMUsageMetrics {

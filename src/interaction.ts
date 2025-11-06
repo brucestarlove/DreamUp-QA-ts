@@ -27,6 +27,44 @@ export interface ActionResult {
   methodUsed?: 'cua' | 'dom' | 'none'; // Track which method was used for this action
   agentResult?: AgentResult; // Agent result data (for agent actions)
   metadata?: Record<string, any>; // Additional metadata (e.g., keys pressed, axis values)
+  action?: string;  // Action type: 'click', 'press', 'agent', etc.
+  target?: string;  // Click target
+  key?: string;     // Key name for press actions
+  description?: string;  // Human-readable description of the action
+}
+
+/**
+ * Generate a human-readable description for an action step
+ */
+function getActionDescription(step: SequenceStep): string {
+  if ('wait' in step) {
+    return `Wait ${step.wait}ms`;
+  }
+  
+  if ('action' in step) {
+    switch (step.action) {
+      case 'click':
+        return `Click "${step.target}"`;
+      case 'press':
+        if (step.alternateKeys && step.alternateKeys.length > 0) {
+          return `Press ${step.alternateKeys.join('/')} alternately${step.repeat ? ` (${step.repeat}x)` : ''}`;
+        }
+        if (step.duration) {
+          return `Press ${step.key} for ${step.duration}ms`;
+        }
+        return `Press ${step.key}${step.repeat ? ` (${step.repeat}x)` : ''}`;
+      case 'screenshot':
+        return 'Take screenshot';
+      case 'observe':
+        return `Observe "${step.target}"`;
+      case 'agent':
+        return `Agent: ${step.instruction || 'Execute task'}`;
+      case 'axis':
+        return `Axis ${step.direction}${step.value !== undefined ? ` (${step.value})` : ''}${step.duration ? ` for ${step.duration}ms` : ''}`;
+    }
+  }
+  
+  return 'Unknown action';
 }
 
 /**
@@ -92,6 +130,8 @@ export async function executeAction(
             executionTime,
             timestamp: getTimestamp(),
             methodUsed: 'none',
+            action: 'wait',
+            description: getActionDescription(step),
           };
         }
 
@@ -124,6 +164,9 @@ export async function executeAction(
                     executionTime,
                     timestamp: getTimestamp(),
                     methodUsed: 'cua',
+                    action: 'click',
+                    target: step.target,
+                    description: getActionDescription(step),
                   };
                 } catch (error) {
                   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -218,6 +261,9 @@ export async function executeAction(
                     executionTime,
                     timestamp: getTimestamp(),
                     methodUsed: 'dom',
+                    action: 'click',
+                    target: step.target,
+                    description: getActionDescription(step),
                   };
                 }
 
@@ -235,6 +281,9 @@ export async function executeAction(
                     executionTime,
                     timestamp: getTimestamp(),
                     methodUsed: 'dom',
+                    action: 'click',
+                    target: step.target,
+                    description: getActionDescription(step),
                   };
                 } catch (error) {
                   // If direct act also fails, throw error
@@ -327,6 +376,9 @@ export async function executeAction(
                 executionTime,
                 timestamp: getTimestamp(),
                 methodUsed: 'dom',
+                action: 'press',
+                key: step.key || step.alternateKeys?.join('/'),
+                description: getActionDescription(step),
               };
             }
 
@@ -351,6 +403,8 @@ export async function executeAction(
                 executionTime,
                 timestamp: getTimestamp(),
                 methodUsed: 'none',
+                action: 'screenshot',
+                description: getActionDescription(step),
               };
             }
 
@@ -380,6 +434,9 @@ export async function executeAction(
                   executionTime,
                   timestamp: getTimestamp(),
                   methodUsed: 'none', // Observe is just a check
+                  action: 'observe',
+                  target: step.target,
+                  description: getActionDescription(step),
                 };
               } catch (error) {
                 logger.error(`Observe failed for "${observeTarget}":`, error);
@@ -391,6 +448,9 @@ export async function executeAction(
                   executionTime,
                   timestamp: getTimestamp(),
                   methodUsed: 'none',
+                  action: 'observe',
+                  target: step.target,
+                  description: getActionDescription(step),
                 };
               }
             }
@@ -512,6 +572,8 @@ export async function executeAction(
                 executionTime,
                 timestamp: getTimestamp(),
                 methodUsed: 'dom',
+                action: 'axis',
+                description: getActionDescription(step),
                 metadata: {
                   direction,
                   value,
@@ -569,6 +631,8 @@ export async function executeAction(
                   timestamp: getTimestamp(),
                   methodUsed: 'cua',
                   agentResult: agentResult.message || agentResult.stepsExecuted ? agentResult : undefined,
+                  action: 'agent',
+                  description: getActionDescription(step),
                 };
               } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
