@@ -7,6 +7,7 @@ import type { ActionResult } from './interaction.js';
 import type { CaptureResult, ScreenshotMetadata } from './capture.js';
 import type { Config } from './config.js';
 import type { Issue } from './utils/errors.js';
+import type { IncrementalWriter } from './incremental-writer.js';
 import { logger } from './utils/logger.js';
 import { z } from 'zod';
 import OpenAI from 'openai';
@@ -483,10 +484,33 @@ export async function evaluatePlayability(
   options: {
     enableLLM?: boolean;
     model?: string;
+    incrementalWriter?: IncrementalWriter;
   } = {},
 ): Promise<EvaluationResult> {
+  const evalStartTime = Date.now();
+  
+  // Report heuristic evaluation starting
+  if (options.incrementalWriter) {
+    options.incrementalWriter.addEvaluationStep({
+      type: 'heuristic',
+      status: 'in_progress',
+      timestamp: new Date().toISOString(),
+    });
+  }
+  
   // Calculate heuristic score
   const heuristic = await calculateHeuristicScore(actionResults, captureResult, consoleLogs, issues, stagehand);
+  
+  // Report heuristic evaluation completed
+  if (options.incrementalWriter) {
+    options.incrementalWriter.addEvaluationStep({
+      type: 'heuristic',
+      status: 'completed',
+      score: heuristic.score,
+      executionTime: Date.now() - evalStartTime,
+      timestamp: new Date().toISOString(),
+    });
+  }
   
   let llmResult: LLMEvaluationResult | undefined;
   let evaluationTokens: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
@@ -494,6 +518,17 @@ export async function evaluatePlayability(
   
   // LLM evaluation (if enabled)
   if (options.enableLLM) {
+    const llmStartTime = Date.now();
+    
+    // Report LLM evaluation starting
+    if (options.incrementalWriter) {
+      options.incrementalWriter.addEvaluationStep({
+        type: 'llm',
+        status: 'in_progress',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    
     const cacheKey = generateCacheKey(gameUrl, config, actionResults);
     const cached = getEvaluationCache(cacheKey);
     
@@ -523,6 +558,17 @@ export async function evaluatePlayability(
         // Cache the result
         setEvaluationCache(cacheKey, llmResult);
       }
+    }
+    
+    // Report LLM evaluation completed
+    if (options.incrementalWriter) {
+      options.incrementalWriter.addEvaluationStep({
+        type: 'llm',
+        status: llmResult ? 'completed' : 'failed',
+        score: llmResult?.playability_score,
+        executionTime: Date.now() - llmStartTime,
+        timestamp: new Date().toISOString(),
+      });
     }
   }
   
