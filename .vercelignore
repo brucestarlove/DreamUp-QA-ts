@@ -1,0 +1,23 @@
+# Ignore CLI service files during Vercel build
+src/api-server.ts
+src/cli.ts
+src/cua.ts
+src/cua-manager.ts
+src/interaction.ts
+src/evaluation.ts
+src/reporter.ts
+src/incremental-writer.ts
+src/session-manager.ts
+src/capture.ts
+
+# Ignore Railway/Render deployment files
+Dockerfile
+nixpacks.toml
+railway.json
+railway-alternative.md
+render.yaml
+
+# Ignore CLI test results
+results/
+results-old/
+

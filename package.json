@@ -6,6 +6,7 @@
   "main": "src/cli.ts",
   "scripts": {
     "start": "bun run src/cli.ts",
+    "api": "bun run src/api-server.ts",
     "test": "bun test",
     "test:unit": "bun test tests/unit",
     "test:integration": "bun test tests/integration",

@@ -262,11 +262,13 @@ export async function calculateHeuristicScore(
   
   // Completion Check: Try to extract game state
   let completion = false;
+  let gameState: { gameOver: boolean; victory?: boolean; score?: number } | null = null;
   try {
-    const gameState = await extractGameState(stagehand);
-    if (gameState) {
-      // Game reached an end state (game over or victory)
-      completion = gameState.gameOver || gameState.victory === true;
+    const extracted = await extractGameState(stagehand);
+    if (extracted) {
+      gameState = extracted;
+      // Only count victory as meaningful completion, not game over
+      completion = extracted.victory === true;
     }
   } catch (error) {
     logger.debug('Completion check failed:', error);
@@ -296,7 +298,33 @@ export async function calculateHeuristicScore(
   if (!loadCheck) score *= 0.3; // Heavy penalty for no load or screenshots
   if (!stability) score *= 0.3; // Heavy penalty for crashes
   score *= 0.8 + (responsiveness * 0.2); // Responsiveness factor
-  if (completion) score = Math.min(1.0, score + 0.1); // Bonus for completion
+  
+  // Game state analysis: penalize non-meaningful outcomes
+  if (gameState) {
+    if (gameState.gameOver && gameState.score === 0) {
+      // Heavy penalty: actions didn't produce meaningful gameplay
+      // Game ended immediately with score 0 indicates actions weren't effective
+      score *= 0.25;
+      logger.debug('Penalty applied: game over with score 0 (non-meaningful gameplay)');
+    } else if (gameState.victory === true) {
+      // Victory is meaningful completion - give bonus
+      score = Math.min(1.0, score + 0.1);
+      logger.debug('Bonus applied: victory achieved');
+    }
+    
+    // Check if game over happened too early (indicates bad config or wrong game type)
+    // Estimate when game over occurred by checking if we have enough successful actions
+    // If game over and we completed less than 50% of actions successfully, extra penalty
+    if (gameState.gameOver && successfulActions < totalActions * 0.5) {
+      score *= 0.5; // Extra penalty for early game over
+      logger.debug('Extra penalty applied: game over occurred before 50% of actions completed');
+    }
+  }
+  
+  // Only give completion bonus for victory, not game over
+  if (completion) {
+    score = Math.min(1.0, score + 0.1);
+  }
   
   // Clamp to [0, 1]
   score = Math.max(0, Math.min(1, score));
@@ -313,6 +341,39 @@ export async function calculateHeuristicScore(
 }
 
 /**
+ * Detect if actions produced meaningful progress
+ */
+function detectMeaningfulProgress(
+  actionResults: ActionResult[],
+  captureResult: CaptureResult,
+  gameState: { gameOver: boolean; victory?: boolean; score?: number } | null,
+): boolean {
+  // If game over with score 0, no meaningful progress
+  if (gameState?.gameOver && gameState.score === 0) {
+    return false;
+  }
+  
+  // If score increased, there was progress
+  if (gameState?.score && gameState.score > 0) {
+    return true;
+  }
+  
+  // If victory, there was progress
+  if (gameState?.victory === true) {
+    return true;
+  }
+  
+  // Check if we have multiple distinct screenshots (visual progress indicator)
+  // Having multiple screenshots suggests the game state changed
+  if (captureResult.screenshots.length >= 3) {
+    return true; // Multiple screenshots suggest visual changes occurred
+  }
+  
+  // Default to true if we can't determine (conservative approach)
+  return true;
+}
+
+/**
  * Evaluate with LLM using OpenAI SDK
  */
 export async function evaluateWithLLM(
@@ -322,6 +383,7 @@ export async function evaluateWithLLM(
   config: Config,
   modelName: string = 'gpt-4o-mini',
   finalScreenshot?: ScreenshotMetadata,
+  gameState?: { gameOver: boolean; victory?: boolean; score?: number },
 ): Promise<{ result: LLMEvaluationResult; tokens: { promptTokens: number; completionTokens: number; totalTokens: number } } | null> {
   // Parse model name (remove provider prefix if present)
   const model = modelName.includes('/') ? modelName.split('/')[1] : modelName;
@@ -358,7 +420,12 @@ export async function evaluateWithLLM(
     }
     
     // Build system prompt
-    const systemPrompt = `You are a QA expert analyzing browser game test sessions. Evaluate playability based on loading, controls, and completion. Respond with valid JSON matching this exact schema: { "playability_score": number (0-1), "issues": string[], "confidence": number (0-1) }`;
+    const systemPrompt = `You are a QA expert analyzing browser game test sessions. Evaluate playability based on loading, controls, completion, and whether actions produced meaningful gameplay. Respond with valid JSON matching this exact schema: { "playability_score": number (0-1), "issues": string[], "confidence": number (0-1) }`;
+    
+    // Include game state information in prompt
+    const gameStateInfo = gameState 
+      ? `\nGame State: gameOver=${gameState.gameOver}, score=${gameState.score ?? 'unknown'}, victory=${gameState.victory ?? 'unknown'}`
+      : '';
     
     // Build user prompt
     const userPromptText = `Analyze this browser game test session:
@@ -366,7 +433,7 @@ export async function evaluateWithLLM(
 Game Genre: ${config.metadata?.genre || 'unknown'}
 Total Actions: ${totalActions}
 Successful Actions: ${successfulActions}
-Failed Actions: ${failedActions.length}
+Failed Actions: ${failedActions.length}${gameStateInfo}
 
 ${errorMessages.length > 0 ? `Action Errors:\n${errorMessages.slice(0, 5).join('\n')}\n` : ''}
 
@@ -379,6 +446,12 @@ Questions to answer:
 2. Were controls responsive?
 3. Did the game complete without crashes?
 4. Are there any visible issues in the final screenshot?
+
+Critical question: Did the actions produce meaningful gameplay?
+- If game ended immediately with score 0, this indicates actions weren't meaningful (config may not match game type)
+- If game progressed and score increased, actions were meaningful
+- If game over happened very early (before most actions completed), config may not match game type
+- Victory indicates successful meaningful gameplay
 
 Respond with JSON: { "playability_score": number (0-1), "issues": string[], "confidence": number (0-1) }`;
     
@@ -485,14 +558,25 @@ export async function evaluatePlayability(
     model?: string;
   } = {},
 ): Promise<EvaluationResult> {
-  // Calculate heuristic score
+  // Calculate heuristic score (this already extracts game state internally)
   const heuristic = await calculateHeuristicScore(actionResults, captureResult, consoleLogs, issues, stagehand);
+  
+  // Extract game state for use in LLM evaluation and final result
+  let gameState: { gameOver: boolean; victory?: boolean; score?: number } | undefined;
+  try {
+    const extracted = await extractGameState(stagehand);
+    if (extracted) {
+      gameState = extracted;
+    }
+  } catch (error) {
+    logger.debug('Game state extraction skipped:', error);
+  }
   
   let llmResult: LLMEvaluationResult | undefined;
   let evaluationTokens: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
   let cacheHit = false;
   
-  // LLM evaluation (if enabled)
+  // LLM evaluation (if enabled) - now with game state
   if (options.enableLLM) {
     const cacheKey = generateCacheKey(gameUrl, config, actionResults);
     const cached = getEvaluationCache(cacheKey);
@@ -514,6 +598,7 @@ export async function evaluatePlayability(
         config,
         options.model || 'gpt-4o-mini',
         finalScreenshot,
+        gameState, // Pass game state to LLM evaluation
       );
       
       if (llm) {
@@ -531,17 +616,6 @@ export async function evaluatePlayability(
     score: llmResult.playability_score,
     confidence: llmResult.confidence,
   } : undefined);
-  
-  // Extract game state if available
-  let gameState: { gameOver: boolean; victory?: boolean; score?: number } | undefined;
-  try {
-    const extracted = await extractGameState(stagehand);
-    if (extracted) {
-      gameState = extracted;
-    }
-  } catch (error) {
-    logger.debug('Game state extraction skipped:', error);
-  }
   
   // Get Stagehand metrics
   const stagehandTokens = await getStagehandMetrics(stagehand);

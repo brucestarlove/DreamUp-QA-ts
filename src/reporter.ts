@@ -141,8 +141,29 @@ export function generateResult(
     }
   });
 
-  // Determine status
-  const status: 'pass' | 'fail' = issues.length === 0 ? 'pass' : 'fail';
+  // Determine status based on both issues and playability
+  // Helper function to determine if the test produced meaningful gameplay
+  function isPlayable(evaluationResult?: typeof evaluationResult, gameState?: { gameOver: boolean; victory?: boolean; score?: number }): boolean {
+    if (!evaluationResult) return true; // Fallback if no evaluation - assume playable
+    
+    // Fail if game over with score 0 (non-meaningful gameplay)
+    if (gameState?.gameOver && gameState.score === 0) {
+      return false;
+    }
+    
+    // Fail if score too low (indicates actions weren't meaningful)
+    if (evaluationResult.finalScore < 0.5) {
+      return false;
+    }
+    
+    return true;
+  }
+  
+  const gameState = evaluationResult?.gameState;
+  const status: 'pass' | 'fail' = 
+    issues.length === 0 && isPlayable(evaluationResult, gameState) 
+      ? 'pass' 
+      : 'fail';
 
   // Use evaluation result if provided, otherwise fall back to simple heuristic
   const playability_score = evaluationResult?.finalScore ?? (() => {

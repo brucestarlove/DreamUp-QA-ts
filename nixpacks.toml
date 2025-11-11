@@ -1,0 +1,20 @@
+# Nixpacks configuration for Railway deployment
+# This configures Bun + Playwright for browser automation
+
+[phases.setup]
+# Required system packages for Playwright browsers
+nixPkgs = [
+  "...",  # Nixpacks auto-detects Bun
+]
+
+[phases.install]
+# Install dependencies and Playwright browsers
+cmds = [
+  "bun install",
+  "bunx playwright install chromium",
+  "bunx playwright install-deps chromium"
+]
+
+[start]
+cmd = "bun run src/api-server.ts"
+
