@@ -7,20 +7,19 @@ import { logger } from './utils/logger.js';
 import type { Config } from './config.js';
 import { retryWithBackoff, isRetryableError } from './utils/retry.js';
 import { createIssue, classifyError, type Issue } from './utils/errors.js';
+import { hasEventListeners } from './utils/type-guards.js';
+import type { ISessionManager, SessionResult, SessionState } from './interfaces/session-manager.interface.js';
 
-export interface SessionResult {
-  page: ReturnType<Stagehand['context']['pages']>[0];
-  context: Stagehand['context'];
-  stagehand: Stagehand;
-}
+// Re-export for backward compatibility
+export type { SessionResult, SessionState };
 
 /**
  * Initialize and manage a browser session with Stagehand
  */
-export class SessionManager {
+export class SessionManager implements ISessionManager {
   private stagehand: Stagehand | null = null;
   private isHeadless: boolean;
-  private sessionState: 'idle' | 'loading' | 'active' | 'error' | 'closed' = 'idle';
+  private sessionState: SessionState = 'idle';
   private issues: Issue[] = [];
   private consoleLogs: string[] = [];
 
@@ -31,7 +30,7 @@ export class SessionManager {
   /**
    * Get current session state
    */
-  getState(): 'idle' | 'loading' | 'active' | 'error' | 'closed' {
+  getState(): SessionState {
     return this.sessionState;
   }
 
@@ -45,7 +44,7 @@ export class SessionManager {
   /**
    * Set session state
    */
-  private setState(newState: 'idle' | 'loading' | 'active' | 'error' | 'closed'): void {
+  private setState(newState: SessionState): void {
     if (this.sessionState !== newState) {
       logger.debug(`Session state: ${this.sessionState} → ${newState}`);
       this.sessionState = newState;
@@ -93,8 +92,8 @@ export class SessionManager {
     this.setState('loading');
     logger.info(`Loading game URL: ${url}`);
 
-    // Use stagehand.page (Playwright-compatible) - cast needed for TypeScript
-    const page = (this.stagehand as any).page || this.stagehand.context.pages()[0];
+    // Use stagehand.page (Playwright-compatible) with proper typing from declaration file
+    const page = this.stagehand.page || this.stagehand.context.pages()[0];
     const context = this.stagehand.context;
     const retries = config.retries ?? 3;
     const loadTimeout = config.timeouts?.load ?? 30000;
@@ -335,25 +334,21 @@ export class SessionManager {
    */
   private setupConsoleListeners(page: ReturnType<Stagehand['context']['pages']>[0]): void {
     try {
-      // stagehand.page is a Playwright Page object with all base methods available
-      // Cast to access event listener methods
-      const playwrightPage = page as any;
-      
-      // Check if page has the on() method
-      if (typeof playwrightPage.on !== 'function') {
+      // Check if page has event listener support using type guard
+      if (!hasEventListeners(page)) {
         logger.debug('Page object does not support event listeners');
         return;
       }
-      
-      // Listen for console messages
-      playwrightPage.on('console', (msg: any) => {
+
+      // Listen for console messages (page is now properly typed)
+      page.on('console', (msg: any) => {
         try {
           const type = msg.type();
           const text = msg.text();
           const timestamp = new Date().toISOString();
           const logEntry = `[${timestamp}] [${type.toUpperCase()}] ${text}`;
           this.consoleLogs.push(logEntry);
-          
+
           // Also log errors to our logger for visibility
           if (type === 'error') {
             logger.debug(`Console error: ${text}`);
@@ -362,9 +357,9 @@ export class SessionManager {
           // Silent failure - don't spam logs
         }
       });
-      
+
       // Listen for page errors
-      playwrightPage.on('pageerror', (error: any) => {
+      page.on('pageerror', (error: any) => {
         try {
           const timestamp = new Date().toISOString();
           const logEntry = `[${timestamp}] [PAGEERROR] ${error.message}\n${error.stack || ''}`;

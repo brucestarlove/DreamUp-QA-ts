@@ -1,23 +1,23 @@
 #!/usr/bin/env bun
 /**
  * CLI Entry Point - QA Agent for Browser Games
+ * Refactored to use Test Orchestrator for better testability and reusability
  */
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import ora from 'ora';
 import { join } from 'path';
+import { mkdirSync } from 'fs';
 import { loadConfig } from './config.js';
-import { SessionManager } from './session.js';
-import { executeSequence } from './interaction.js';
-import { CaptureManager } from './capture.js';
-import { CUAManager } from './cua.js';
-import { generateResult, writeResult, writeInitialResult, type TestResult } from './reporter.js';
 import { generateSessionId } from './utils/time.js';
-import { logger } from './utils/logger.js';
-import { evaluatePlayability } from './evaluation.js';
+import { writeInitialResult } from './reporter.js';
+import { createTestOrchestrator } from './services/container.js';
+import { OraProgressReporter } from './interfaces/ora-progress-reporter.js';
+import { createLogger } from './observability/structured-logger.js';
+import type { TestResult } from './reporter.js';
 
 const program = new Command();
+const logger = createLogger({ service: 'cli' });
 
 program
   .name('qa-agent')
@@ -35,315 +35,130 @@ program
   .option('--llm', 'Enable LLM-based evaluation', false)
   .option('--model <model>', 'Override LLM model')
   .action(async (gameUrl: string, options) => {
-    const spinner = ora('Initializing QA agent...').start();
     const startTime = Date.now();
 
     try {
       // Load configuration
-      spinner.text = 'Loading configuration...';
+      logger.info('Loading configuration', { configPath: options.config });
       const config = loadConfig(options.config);
 
       // Generate session directory
       const sessionId = generateSessionId();
       const outputDir = options.outputDir || 'results';
       const sessionDir = join(process.cwd(), outputDir, sessionId);
-      const { mkdirSync } = await import('fs');
       mkdirSync(sessionDir, { recursive: true });
+
+      logger.info('Test session started', {
+        sessionId,
+        gameUrl,
+        sessionDir,
+        configPath: options.config,
+      });
 
       // Write initial output.json so the session appears in the dashboard immediately
       writeInitialResult(gameUrl, sessionDir, options.config);
 
-      spinner.succeed('Configuration loaded');
+      // Create progress reporter
+      const progressReporter = new OraProgressReporter();
 
-      // Initialize session manager
-      spinner.start('Initializing browser session...');
-      const sessionManager = new SessionManager(!options.headed);
-      const session = await sessionManager.loadGame(gameUrl, config);
-      spinner.succeed('Browser session initialized');
-
-      // Setup capture manager
-      const captureManager = new CaptureManager(sessionDir);
-
-      // Initialize CUA manager if:
-      // 1. Enabled globally (alwaysCUA: true)
-      // 2. Any click action has useCUA: true
-      // 3. Any agent action has useCUA: true (explicitly set)
-      const hasCUAInClickActions = config.sequence.some(
-        (step) => 'action' in step && step.action === 'click' && step.useCUA === true,
-      );
-      const hasAgentActionsWithCUA = config.sequence.some(
-        (step) => 'action' in step && step.action === 'agent' && step.useCUA === true,
-      );
-      const shouldInitializeCUA = config.alwaysCUA || hasCUAInClickActions || hasAgentActionsWithCUA;
-
-      let cuaManager: CUAManager | undefined;
-      if (shouldInitializeCUA) {
-        spinner.start('Initializing Computer Use Agent...');
-        try {
-          cuaManager = new CUAManager(session.stagehand, {
-            model: config.cuaModel || 'openai/computer-use-preview',
-            maxSteps: config.cuaMaxSteps || 3,
-          });
-          await cuaManager.initialize();
-          spinner.succeed('Computer Use Agent initialized');
-          const cuaReason = hasAgentActionsWithCUA ? 'agent actions' : config.alwaysCUA ? 'globally (alwaysCUA)' : hasCUAInClickActions ? 'per-action' : 'none';
-          logger.info(
-            `CUA enabled: ${cuaReason}`,
-          );
-        } catch (error) {
-          spinner.fail('Failed to initialize Computer Use Agent');
-          logger.error('CUA initialization error:', error);
-          // Continue without CUA (graceful degradation)
-          cuaManager = undefined;
-          if (!process.env.OPENAI_API_KEY) {
-            logger.warn('OPENAI_API_KEY not set. CUA requires an OpenAI API key.');
-          }
-        }
-      }
-
-      // Capture baseline screenshot
-      spinner.start('Capturing baseline screenshot...');
-      await captureManager.captureBaseline(session.page);
-      spinner.succeed('Baseline screenshot captured');
-
-      // Execute action sequence
-      spinner.start('Executing test sequence...');
-      const actionResults = await executeSequence(
-        session.stagehand,
+      // Create test orchestrator with dependency injection
+      progressReporter.start('Initializing QA agent...');
+      const orchestrator = await createTestOrchestrator({
         config,
-        startTime,
-        captureManager,
-        (result) => {
-          if (!result.success) {
-            spinner.warn(`Action ${result.actionIndex + 1} failed: ${result.error}`);
-          }
-        },
-        cuaManager,
-      );
+        sessionDir,
+        headless: !options.headed,
+        progressReporter,
+      });
+      progressReporter.succeed('QA agent initialized');
 
-      const successfulActions = actionResults.filter((r) => r.success).length;
-      spinner.succeed(`Executed ${successfulActions}/${actionResults.length} actions successfully`);
-
-      // Capture final screenshot - check if page is still available
-      spinner.start('Capturing final screenshot...');
-      try {
-        // Check if page is still available (browser connection may have died)
-        const pages = session.stagehand.context.pages();
-        const page = pages.length > 0 ? pages[0] : null;
-        
-        if (page) {
-          const screenshotResult = await captureManager.takeScreenshot(page, 'end', actionResults.length);
-          if (screenshotResult) {
-            spinner.succeed('Final screenshot captured');
-          } else {
-            spinner.warn('Final screenshot skipped (page unavailable)');
-          }
-        } else {
-          spinner.warn('Final screenshot skipped (browser connection closed)');
-          logger.warn('Cannot capture final screenshot: browser connection is closed');
-        }
-      } catch (error) {
-        spinner.warn('Failed to capture final screenshot');
-        logger.error('Final screenshot capture failed:', error);
-      }
-
-      // Collect console logs - check if page is still available
-      spinner.start('Collecting console logs...');
-      let logsPath: string | null = null;
-      try {
-        const pages = session.stagehand.context.pages();
-        const page = pages.length > 0 ? pages[0] : null;
-        const logs = page ? await sessionManager.getConsoleLogs(page) : [];
-        logsPath = await captureManager.saveConsoleLogs(logs);
-        if (logsPath) {
-          spinner.succeed('Console logs collected');
-        } else {
-          spinner.warn('Console logs skipped (page unavailable)');
-        }
-      } catch (error) {
-        spinner.warn('Failed to collect console logs');
-        logger.error('Console log collection failed:', error);
-        // Continue with empty logs
-        logsPath = await captureManager.saveConsoleLogs([]);
-      }
-
-      // Collect all issues from session and capture managers
-      const sessionIssues = sessionManager.getIssues();
-      const captureResult = captureManager.getResult(logsPath || undefined);
-      const allIssues = [...sessionIssues, ...captureResult.issues];
-
-      // Get CUA usage metrics if available
-      const cuaUsage = cuaManager?.getUsageMetrics();
-
-      // Generate and write result
-      spinner.start('Generating test report...');
-      let testResult: TestResult;
-      let resultPath: string;
-      
-      // Get config path (absolute path if provided)
-      const configPath = options.config ? join(process.cwd(), options.config) : undefined;
-      
-      // Run evaluation (always run heuristic, LLM optional)
-      spinner.start('Evaluating playability...');
-      let evaluationResult;
-      try {
-        // Get console logs for evaluation
-        const pages = session.stagehand.context.pages();
-        const page = pages.length > 0 ? pages[0] : null;
-        const consoleLogs = page ? await sessionManager.getConsoleLogs(page) : [];
-        
-        evaluationResult = await evaluatePlayability(
-          session.stagehand,
-          actionResults,
-          captureResult,
-          consoleLogs,
-          allIssues,
-          config,
-          gameUrl,
-          {
-            enableLLM: options.llm || false,
-            model: options.model || 'gpt-4o-mini',
-          },
-        );
-        
-        spinner.succeed('Playability evaluation completed');
-      } catch (error) {
-        spinner.warn('Evaluation failed, using heuristic-only score');
-        logger.warn('Evaluation error:', error);
-        // Continue without evaluation result
-      }
-      
-      try {
-        testResult = generateResult(
-          actionResults,
-          captureResult,
-          startTime,
-          gameUrl,
-          allIssues,
-          cuaUsage,
-          configPath,
-          evaluationResult,
-        );
-
-        resultPath = writeResult(testResult, sessionDir);
-        spinner.succeed('Test report generated');
-      } catch (error) {
-        spinner.warn('Failed to generate full report, creating minimal report');
-        logger.error('Report generation failed:', error);
-        
-        // Generate minimal report to ensure output is always created
-        try {
-          const minimalResult: TestResult = {
-            url: gameUrl,
-            status: 'fail' as const,
-            playability_score: 0.0,
-            issues: [
-              ...allIssues,
-              {
-                type: 'action_failed' as const,
-                description: `Report generation failed: ${error instanceof Error ? error.message : String(error)}`,
-                timestamp: new Date().toISOString(),
-              },
-            ],
-            screenshots: captureResult.screenshots.map((s) => s.filename),
-            timestamp: new Date().toISOString(),
-            test_duration: Math.round((Date.now() - startTime) / 1000),
-          };
-          
-          if (configPath) {
-            minimalResult.config_path = configPath;
-          }
-          testResult = minimalResult;
-          resultPath = writeResult(minimalResult, sessionDir);
-        } catch (minimalError) {
-          // Last resort: write basic JSON
-          const { writeFileSync } = await import('fs');
-          const emergencyPath = join(sessionDir, 'output.json');
-          const emergencyResult: TestResult = {
-            url: gameUrl,
-            status: 'fail',
-            playability_score: 0.0,
-            issues: [
-              {
-                type: 'action_failed',
-                description: 'Failed to generate report',
-                timestamp: new Date().toISOString(),
-              },
-            ],
-            screenshots: [],
-            timestamp: new Date().toISOString(),
-          };
-          
-          if (configPath) {
-            emergencyResult.config_path = configPath;
-          }
-          writeFileSync(
-            emergencyPath,
-            JSON.stringify(emergencyResult, null, 2),
-            'utf-8',
-          );
-          testResult = emergencyResult;
-          resultPath = emergencyPath;
-          logger.error('Emergency report written:', emergencyPath);
-        }
-      }
-
-      // Cleanup
-      await sessionManager.cleanup();
+      // Execute test
+      const { result, resultPath } = await orchestrator.executeTest({
+        gameUrl,
+        config,
+        sessionDir,
+        configPath: options.config ? join(process.cwd(), options.config) : undefined,
+        enableLLM: options.llm || false,
+        llmModel: options.model,
+      });
 
       // Display summary
-      console.log('\n' + chalk.bold('Test Summary:'));
-      console.log(chalk[testResult.status === 'pass' ? 'green' : 'red'](`Status: ${testResult.status.toUpperCase()}`));
-      console.log(chalk.cyan(`Score: ${testResult.playability_score.toFixed(2)}`));
-      console.log(chalk.yellow(`Issues: ${testResult.issues.length}`));
-      console.log(chalk.blue(`Duration: ${testResult.test_duration}s`));
-      
-      // Show action method breakdown
-      if (testResult.action_methods) {
-        const { cua, dom, none } = testResult.action_methods;
-        console.log(chalk.magenta(`Actions: CUA=${cua}, DOM=${dom}, Other=${none}`));
-      }
-      
-      // Show LLM usage if available
-      if (testResult.llm_usage) {
-        const usage = testResult.llm_usage;
-        console.log(chalk.cyan(`LLM Usage: ${usage.totalCalls} calls, ${usage.totalTokens} tokens, $${usage.estimatedCost.toFixed(4)}`));
-      }
-      
-      // Show agent responses if available (for agent actions)
-      if (testResult.agent_responses && testResult.agent_responses.length > 0) {
-        console.log('\n' + chalk.bold('Agent Responses:'));
-        testResult.agent_responses.forEach((agentResult, index) => {
-          if (agentResult.message) {
-            console.log(chalk.green(`  ${index + 1}. ${agentResult.message}`));
-          }
-          if (agentResult.stepsExecuted !== undefined) {
-            console.log(chalk.gray(`     (${agentResult.stepsExecuted} steps executed)`));
-          }
-        });
-      }
-      
-      console.log(chalk.gray(`Results: ${resultPath}`));
+      displaySummary(result, resultPath);
 
-      if (testResult.issues.length > 0) {
-        console.log('\n' + chalk.red('Issues:'));
-        testResult.issues.forEach((issue) => {
-          const actionInfo = issue.actionIndex !== undefined ? ` [Action ${issue.actionIndex + 1}]` : '';
-          console.log(chalk.red(`  - [${issue.type}]${actionInfo} ${issue.description}`));
-        });
-      }
-
-      process.exit(testResult.status === 'pass' ? 0 : 1);
+      // Exit with appropriate code
+      process.exit(result.status === 'pass' ? 0 : 1);
     } catch (error) {
-      spinner.fail('Test failed');
-      console.error(chalk.red('\nError:'), error instanceof Error ? error.message : String(error));
-      if (error instanceof Error && error.stack) {
-        console.error(chalk.gray(error.stack));
-      }
+      handleError(error, logger);
       process.exit(1);
     }
   });
 
+/**
+ * Display test summary
+ */
+function displaySummary(result: TestResult, resultPath: string): void {
+  console.log('\n' + chalk.bold('Test Summary:'));
+  console.log(
+    chalk[result.status === 'pass' ? 'green' : 'red'](`Status: ${result.status.toUpperCase()}`)
+  );
+  console.log(chalk.cyan(`Score: ${result.playability_score.toFixed(2)}`));
+  console.log(chalk.yellow(`Issues: ${result.issues.length}`));
+  console.log(chalk.blue(`Duration: ${result.test_duration}s`));
+
+  // Show action method breakdown
+  if (result.action_methods) {
+    const { cua, dom, none } = result.action_methods;
+    console.log(chalk.magenta(`Actions: CUA=${cua}, DOM=${dom}, Other=${none}`));
+  }
+
+  // Show LLM usage if available
+  if (result.llm_usage) {
+    const usage = result.llm_usage;
+    console.log(
+      chalk.cyan(
+        `LLM Usage: ${usage.totalCalls} calls, ${usage.totalTokens} tokens, $${usage.estimatedCost.toFixed(4)}`
+      )
+    );
+  }
+
+  // Show agent responses if available (for agent actions)
+  if (result.agent_responses && result.agent_responses.length > 0) {
+    console.log('\n' + chalk.bold('Agent Responses:'));
+    result.agent_responses.forEach((agentResult, index) => {
+      if (agentResult.message) {
+        console.log(chalk.green(`  ${index + 1}. ${agentResult.message}`));
+      }
+      if (agentResult.stepsExecuted !== undefined) {
+        console.log(chalk.gray(`     (${agentResult.stepsExecuted} steps executed)`));
+      }
+    });
+  }
+
+  console.log(chalk.gray(`Results: ${resultPath}`));
+
+  if (result.issues.length > 0) {
+    console.log('\n' + chalk.red('Issues:'));
+    result.issues.forEach((issue) => {
+      const actionInfo =
+        issue.actionIndex !== undefined ? ` [Action ${issue.actionIndex + 1}]` : '';
+      console.log(chalk.red(`  - [${issue.type}]${actionInfo} ${issue.description}`));
+    });
+  }
+}
+
+/**
+ * Handle errors with structured logging
+ */
+function handleError(error: unknown, logger: ReturnType<typeof createLogger>): void {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const errorStack = error instanceof Error ? error.stack : undefined;
+
+  console.error(chalk.red('\nError:'), errorMessage);
+  if (errorStack) {
+    console.error(chalk.gray(errorStack));
+  }
+
+  logger.error('Test failed', error as Error);
+}
+
 // Parse command line arguments
 program.parse();
-

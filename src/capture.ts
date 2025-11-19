@@ -8,6 +8,7 @@ import { join } from 'path';
 import { logger } from './utils/logger.js';
 import { getTimestamp } from './utils/time.js';
 import { createIssue, type Issue } from './utils/errors.js';
+import type { ICaptureManager } from './interfaces/capture-manager.interface.js';
 
 export interface ScreenshotMetadata {
   filename: string;
@@ -26,7 +27,7 @@ export interface CaptureResult {
 /**
  * Capture manager for screenshots and logs
  */
-export class CaptureManager {
+export class CaptureManager implements ICaptureManager {
   private sessionDir: string;
   private screenshots: ScreenshotMetadata[] = [];
   private issues: Issue[] = [];

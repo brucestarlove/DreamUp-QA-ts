@@ -6,6 +6,7 @@
 import type { Stagehand } from '@browserbasehq/stagehand';
 import { logger } from './utils/logger.js';
 import type { Config } from './config.js';
+import type { ICUAManager } from './interfaces/cua-manager.interface.js';
 
 export interface CUAOptions {
   model?: string;
@@ -44,7 +45,7 @@ function calculateCost(inputTokens: number, outputTokens: number, model: string)
   return inputCost + outputCost;
 }
 
-export class CUAManager {
+export class CUAManager implements ICUAManager {
   private agent: any = null; // Stagehand Agent type
   private stagehand: Stagehand;
   private config: CUAOptions;
